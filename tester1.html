@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	<script type="text/javascript" src="jquery.js"></script>
+	<script type="text/javascript">
+	function getEffectiveHeight(id, width) {
+		$("body").prepend('<div id="measureme" style="display: none; width: ' + width +'px"></div>');
+		$("#measureme").html($("#" + id).html());
+		var height = $("#measureme").height();
+		$("#measureme").remove();
+		return height;
+	}
+	
+	function focusArea(){
+		$("#area").focus();
+	}
+	</script>
+    <title>Tester</title>
+  </head>
+  <body>  
+
+	<a href="#" onclick="focusArea();return false;"> Focus on area... hard </a>
+
+<label id="ta">
+		<span>
+		<textarea id="area">HI Friends!</textarea>
+		</span>
+</label>
+		<div id="text2" style="height: 150px; width: 200px; border: 1px solid yellow">
+			Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah. Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.
+			Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah. Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.Lorem ipsum blah.
+		</div>
+  </body>
+</html>
