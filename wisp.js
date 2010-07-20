@@ -125,7 +125,9 @@ wisp.cons = function(first, rest) {
     return [first, rest];
 };
 wisp.first = function(list) {
-    if (!wisp.isNonEmptyCons(list)) throw "Wisp error: first is only defined for the non-empty lists";
+    if (!wisp.isNonEmptyCons(list)){
+		throw "Wisp error: first is only defined for the non-empty lists";
+	}
     return list[0];
 };
 wisp.second = function(list) {
@@ -375,18 +377,29 @@ wisp.interp = function(expr, env) {
     case "cond":
         return wisp.interpCond(expr.val, env);
 	case "def":
-		env[expr.param] = wisp.interp(expr.body, env);
+		val = wisp.interp(expr.body, env);
+		env[expr.param] = val;
+		if (typeof val === "object" && val.type && val.type === "closure"){
+			// give self reference to allow for recursion
+			val.savedEnv[expr.param] = val;
+		}
 		return expr.param;
     case "lambda":
         // create and return a closure
-        closure = function(args) {
-            return wisp.interp(expr.body, wisp.addArgsToEnv(expr.params, args, env));
-        };
-        return closure;
+		newEnv = $.extend({}, env); // shallow copy, will need to extend for namesspaces, function re-definition
+		return {
+                type: "closure",
+                body: expr.body,
+				params: expr.params,
+				savedEnv: newEnv
+            };
     case "app":
         closure = wisp.interp(expr.funExpr, env);
         args = wisp.interp(expr.argsExpr, env);
-        return closure(args);
+		if (typeof closure === "function"){
+			return closure(args);
+		}
+        return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
     default:
         throw "Interpreter error, unknown abstract syntax type";
     }
