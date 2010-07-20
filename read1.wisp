@@ -12,4 +12,4 @@
 			((empty? item) "empty!")
 			((list? item) "nonEmptyList!"))))
 
-(printType "sonia")
+(printType (list "sonia"))
