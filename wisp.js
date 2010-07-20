@@ -36,6 +36,22 @@ E.g. this all works and correctly interprets:
 
 Comments would be nice to have.
 
+Morning of Tuesday:
+
+Just realized that recursion for 'def' already works implicitly!
+I think we are now turing-complete :)
+
+(def length
+	(lambda (ls)
+		(cond
+			((empty? ls) 0)
+			(else (+ 1 (length (rest ls))))
+			)))
+
+(length (list "hi" "there" "babe"))
+
+==> returns 3
+
 **/
 
 // Adding some string functions
@@ -327,7 +343,7 @@ wisp.interpCond = function(args, env) {
 
 wisp.addArgsToEnv = function(params, args, startingEnv) {
     if (wisp.isEmpty(params)) {
-        startingEnv['argumentsList'] = args;
+        startingEnv['argslist'] = args;
         return startingEnv;
     }
     else if (wisp.isEmpty(args)) {

@@ -1,15 +1,34 @@
-(def make-adder
-	(lambda (num1 num2)
-		(lambda (other)
-			(+ num1 num2 other))))
-		
-((make-adder 120 30) 100)
-
-(def printType
-	(lambda (item)
+(def length (lambda (ls)
 		(cond
-			((atom? item) "atom!")
-			((empty? item) "empty!")
-			((list? item) "nonEmptyList!"))))
+			((empty? ls) 0)
+			(else (+ 1 (length (rest ls))))
+			)))
 
-(printType (list "sonia"))
+(def mylist
+	(list "hey" "there" "I'm" "a" "cat"))
+	
+(length mylist)
+
+(first mylist)
+
+(def second
+	(lambda (ls)
+		(first (rest ls))))
+		
+(second mylist)
+
+(def third
+	(lambda (ls)
+		(first (rest (rest ls)))))
+		
+(third mylist)
+
+(def if
+	(lambda ()
+		(cond
+			((first argslist) (second argslist))
+			(else (third argslist)))))
+			
+(if (eq? 3 (list 3)) (+ 100 200) (- 300 400))
+
+(length mylist)
