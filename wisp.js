@@ -124,10 +124,15 @@ wisp.cons = function(first, rest) {
     if (!wisp.isCons(rest)) throw "Wisp error: must cons onto another list";
     return [first, rest];
 };
+wisp.append2 = function(list1, list2){
+	if(!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
+	if (wisp.isEmpty(list1)) return list2;
+	return wisp.cons(wisp.first(list1), wisp.append2(wisp.rest(list1), list2));
+};
 wisp.first = function(list) {
-    if (!wisp.isNonEmptyCons(list)){
-		throw "Wisp error: first is only defined for the non-empty lists";
-	}
+    if (!wisp.isNonEmptyCons(list)) {
+        throw "Wisp error: first is only defined for non-empty lists";
+    }
     return list[0];
 };
 wisp.second = function(list) {
@@ -136,16 +141,16 @@ wisp.second = function(list) {
 wisp.third = function(list) {
     return wisp.first(wisp.rest(wisp.rest(list)));
 };
-wisp.firsts = function(list){
-	if (wisp.isEmpty(list)) return list;
-	return wisp.cons(wisp.first(wisp.first(list)), wisp.firsts(wisp.rest(list)));
+wisp.firsts = function(list) {
+    if (wisp.isEmpty(list)) return list;
+    return wisp.cons(wisp.first(wisp.first(list)), wisp.firsts(wisp.rest(list)));
 };
-wisp.seconds = function(list){
-	if (wisp.isEmpty(list)) return list;
-	return wisp.cons(wisp.second(wisp.first(list)), wisp.seconds(wisp.rest(list)));
-}; 
+wisp.seconds = function(list) {
+    if (wisp.isEmpty(list)) return list;
+    return wisp.cons(wisp.second(wisp.first(list)), wisp.seconds(wisp.rest(list)));
+};
 wisp.rest = function(list) {
-    if (!wisp.isNonEmptyCons(list)) throw "Wisp error: rest is only defined for the non-empty lists";
+    if (!wisp.isNonEmptyCons(list)) throw "Wisp error: rest is only defined for non-empty lists";
     return list[1];
 };
 
@@ -184,9 +189,13 @@ wisp.readIntoArray = function(wispScript, advance) {
 };
 
 wisp.read = function(wispScript, advance) {
-	if (advance === undefined) advance = {'index': 0 };
-    var arrd = wisp.readIntoArray(wispScript, advance).toWispSexp();
-	return arrd;
+    if (advance === undefined) {
+        advance = {
+            'index': 0
+        };
+    }
+    var arrd = wisp.readIntoArray(wispScript, advance);
+    return (arrd instanceof Array) ? arrd.toWispSexp() : arrd;
 };
 
 // converts array (such as that produced by readIntoArray) into wisp sexp
@@ -267,9 +276,8 @@ wisp.parse = function(sexp) {
             return {
                 type:
                 "app",
-                funExpr:
-                {
-					type: "lambda",
+                funExpr: {
+                    type: "lambda",
                     params: wisp.firsts(wisp.second(sexp)),
                     body: wisp.parse(wisp.third(sexp))
                 },
@@ -291,12 +299,13 @@ wisp.parse = function(sexp) {
                 "cond",
                 val: wisp.parseArgs(wisp.rest(sexp))
             };
-		case "def":
-			return {
-				type: "def",
-				param: wisp.second(sexp),
-				body: wisp.parse(wisp.third(sexp))
-			};
+        case "def":
+            return {
+                type:
+                "def",
+                param: wisp.second(sexp),
+                body: wisp.parse(wisp.third(sexp))
+            };
         default:
             return {
                 type:
@@ -376,29 +385,30 @@ wisp.interp = function(expr, env) {
         return wisp.interpArgs(expr.val, env);
     case "cond":
         return wisp.interpCond(expr.val, env);
-	case "def":
-		val = wisp.interp(expr.body, env);
-		env[expr.param] = val;
-		if (typeof val === "object" && val.type && val.type === "closure"){
-			// give self reference to allow for recursion
-			val.savedEnv[expr.param] = val;
-		}
-		return expr.param;
+    case "def":
+        val = wisp.interp(expr.body, env);
+        env[expr.param] = val;
+        if (typeof val === "object" && val.type && val.type === "closure") {
+            // give self reference to allow for recursion
+            val.savedEnv[expr.param] = val;
+        }
+        return expr.param;
     case "lambda":
         // create and return a closure
-		newEnv = $.extend({}, env); // shallow copy, will need to extend for namesspaces, function re-definition
-		return {
-                type: "closure",
-                body: expr.body,
-				params: expr.params,
-				savedEnv: newEnv
-            };
+        newEnv = $.extend({},
+        env); // shallow copy, will need to extend for namesspaces, function re-definition
+        return {
+            type: "closure",
+            body: expr.body,
+            params: expr.params,
+            savedEnv: newEnv
+        };
     case "app":
         closure = wisp.interp(expr.funExpr, env);
         args = wisp.interp(expr.argsExpr, env);
-		if (typeof closure === "function"){
-			return closure(args);
-		}
+        if (typeof closure === "function") {
+            return closure(args);
+        }
         return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
     default:
         throw "Interpreter error, unknown abstract syntax type";
@@ -417,20 +427,20 @@ wisp.basicEnv = {
         return wisp.first(args) - arguments.callee(wisp.rest(args));
     },
 
-	"*": function(args) {
+    "*": function(args) {
         if (wisp.isEmpty(args)) return 1;
         return wisp.first(args) * arguments.callee(wisp.rest(args));
     },
 
-	"/": function(args) {
+    "/": function(args) {
         if (wisp.isEmpty(args)) return 1;
         return wisp.first(args) / arguments.callee(wisp.rest(args));
     },
 
-	"%": function(args){
-		// only defined for two operators
-		return wisp.first(args) % wisp.second(args);
-	},
+    "%": function(args) {
+        // only defined for two operators
+        return wisp.first(args) % wisp.second(args);
+    },
     // list manipulation
     "list": function(args) {
         return args;
@@ -438,28 +448,18 @@ wisp.basicEnv = {
     "first": function(args) {
         return wisp.first(wisp.first(args));
     },
-    "car": function(args) {
-        return wisp.first(wisp.first(args));
-    },
     "rest": function(args) {
-        return wisp.rest(wisp.first(args));
-    },
-    "cdr": function(args) {
         return wisp.rest(wisp.first(args));
     },
     "cons": function(args) {
         return wisp.cons(wisp.first(args), wisp.second(args));
     },
-    "cons?": function(args) {
-        return wisp.isCons(wisp.first(args));
-    },
-	"list?": function(args) {
+    "list?": function(args) {
         return wisp.isCons(wisp.first(args));
     },
     "atom?": function(args) {
         return wisp.isAtom(wisp.first(args));
     },
-    "empty": wisp.empty,
     "empty?": function(args) {
         return wisp.isEmpty(wisp.first(args));
     },
@@ -469,15 +469,25 @@ wisp.basicEnv = {
         if (wisp.isAtom(first) && wisp.isAtom(second)) {
             return first === second;
         }
-        else if (wisp.isCons(first) && wisp.isCons(second)) {
-            var firsts = [wisp.first(first), wisp.first(second)].toWispSexp();
-            var rests = [wisp.rest(first), wisp.rest(second)].toWispSexp();
+		else if (wisp.isEmpty(first) && wisp.isEmpty(second)){
+			return true;
+		}
+        else if (wisp.isNonEmptyCons(first) && wisp.isNonEmptyCons(second)) {
+			var firsts = wisp.cons(wisp.first(first), wisp.cons(wisp.first(second), wisp.empty));
+			if (wisp.isEmpty(wisp.rest(first)) && wisp.isEmpty(wisp.rest(second))){
+				return arguments.callee(firsts);
+			}
+			var rests = wisp.cons(wisp.rest(first), wisp.cons(wisp.rest(second), wisp.empty));
             return arguments.callee(firsts) && arguments.callee(rests);
         }
         else {
             return false;
         }
     },
+	"append": function(args){
+		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+		return wisp.append2(wisp.first(args), arguments.callee(wisp.rest(args)));
+	},
     // types
     "number?": function(args) {
         return wisp.isNumber(wisp.first(args));
@@ -488,8 +498,11 @@ wisp.basicEnv = {
     "string?": function(args) {
         return wisp.isSymbol(wisp.first(args));
     },
-    // control structures
-    "else": true
+	// pass through functions
+	"log": function(args){
+		console.log(args.toWispString());
+		return args;
+	}
 };
 
 //
@@ -508,18 +521,31 @@ for (i = 0; i < links.length; i++) {
     }
 }
 
-var val, sexps = [], parsed = [], env = wisp.basicEnv, advance = {'index': 0 };
-// for now just get first one, fetch it and interpret it
-$.get(wisp.scripts[0].href,
-function(wispScript) {
-	wispScript = wispScript.trim();
-	while (advance['index'] < wispScript.length){
-		sexps.push(wisp.read(wispScript, advance));
-	}
-	for (i = 0; i < sexps.length; i ++){
-		val = wisp.interp(wisp.parse(sexps[i]), env);
-	}
-    console.log(val);
-    var str = wisp.isCons(val) ? val.toWispString() : val;
-    $("body").html("Wisp script returned: " + str);
-});
+var val, advance, sexps, env = wisp.basicEnv,
+scriptIndex = 0;
+
+wisp.readNextScript = function() {
+    $.get(wisp.scripts[scriptIndex].href,
+    function(wispScript) {
+        wispScript = wispScript.trim();
+        advance = {
+            'index': 0
+        };
+        sexps = [];
+        while (advance['index'] < wispScript.length) {
+            sexps.push(wisp.read(wispScript, advance));
+        }
+        for (i = 0; i < sexps.length; i++) {
+            val = wisp.interp(wisp.parse(sexps[i]), env);
+        }
+        console.log(val);
+        var str = wisp.isCons(val) ? val.toWispString() : val;
+        $("body").html("Wisp script returned: " + str);
+        scriptIndex++;
+        if (scriptIndex < wisp.scripts.length) {
+            wisp.readNextScript();
+        }
+    });
+};
+
+if (wisp.scripts.length > 0) wisp.readNextScript();
