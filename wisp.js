@@ -154,8 +154,8 @@ wisp.rest = function(list) {
     return list[1];
 };
 
-wisp.readIntoArray = function(wispScript, advance) {
-    if (wispScript.length === 0 || wispScript.length <= advance['index']) return wisp.EOF;
+wisp._readIntoArray = function(wispScript, advance) {
+    if (wispScript.length === 0 || wispScript.length < advance['index']) return wisp.EOF;
     var upToHere = wispScript.substring(advance['index']);
     var nextChar = upToHere.trim()[0];
     if (nextChar === ")") {
@@ -179,7 +179,7 @@ wisp.readIntoArray = function(wispScript, advance) {
         advance['index'] += upToHere.indexOf("(") + 1;
         var val, sexp = [];
         while (true) {
-            val = wisp.readIntoArray(wispScript, advance);
+            val = wisp._readIntoArray(wispScript, advance);
             if (val === wisp.EOF) throw "Error: end of file reached without reaching list end";
             if (val === wisp.EOL) break;
             sexp.push(val);
@@ -188,17 +188,30 @@ wisp.readIntoArray = function(wispScript, advance) {
     }
 };
 
+wisp.removeCommentLines = function(wispScript){
+	var i, line, length, cleaned, lines = wispScript.split("\n");
+	length = lines.length; 
+	for (i = 0; i < length; i++){
+		line = lines[i];
+		if (line.trim()[0] === ";"){
+			delete lines[i]; 
+		}
+	}
+	cleaned = lines.join(" ");
+	return cleaned;
+};
+
 wisp.read = function(wispScript, advance) {
     if (advance === undefined) {
         advance = {
             'index': 0
         };
     }
-    var arrd = wisp.readIntoArray(wispScript, advance);
+    var arrd = wisp._readIntoArray(wispScript, advance);
     return (arrd instanceof Array) ? arrd.toWispSexp() : arrd;
 };
 
-// converts array (such as that produced by readIntoArray) into wisp sexp
+// converts array (such as that produced by _readIntoArray) into wisp sexp
 // inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
 Array.prototype.toWispSexp = function() {
     var i, item, reversed, result = wisp.empty;
@@ -527,7 +540,7 @@ scriptIndex = 0;
 wisp.readNextScript = function() {
     $.get(wisp.scripts[scriptIndex].href,
     function(wispScript) {
-        wispScript = wispScript.trim();
+        wispScript = wisp.removeCommentLines(wispScript).trim();
         advance = {
             'index': 0
         };
@@ -538,7 +551,6 @@ wisp.readNextScript = function() {
         for (i = 0; i < sexps.length; i++) {
             val = wisp.interp(wisp.parse(sexps[i]), env);
         }
-        console.log(val);
         var str = wisp.isCons(val) ? val.toWispString() : val;
         $("body").html("Wisp script returned: " + str);
         scriptIndex++;

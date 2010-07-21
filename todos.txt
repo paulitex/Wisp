@@ -1,7 +1,6 @@
 - macros (may precipitate removal of abstract syntax in interpreter?)
 - namespaces
 - ' and quote
-- comments (and single ";" and |# and #| (comment ...) macro)
 - multiline string
 - compare to clojure basic read types
 - Better error messages
