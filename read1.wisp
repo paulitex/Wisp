@@ -1,3 +1,4 @@
-(reverse
-	(append (list 24 3 "happy") (list "two" "fo") (list "poopy") (list true false))
-	)
+;;  Hey steve
+;;  This won't break my script
+
+"hi my friends, how are you?"  ; that's awesome.

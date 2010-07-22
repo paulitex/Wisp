@@ -1,7 +1,7 @@
 - macros (may precipitate removal of abstract syntax in interpreter?)
 - namespaces
+- sequences 
 - ' and quote
-- multiline string
 - compare to clojure basic read types
 - Better error messages
 - mutation / while loop
@@ -11,5 +11,4 @@
 - tests
 - add toWispString() to objects (for closure printing, etc..)
 - implement each: (CL dolist more or less)
-- Garbage collection & memory usage -> reason about this.
-Gut inclination is currently implementation eats up memory.
+- Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory.

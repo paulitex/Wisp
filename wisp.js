@@ -1,104 +1,20 @@
 /**
-Late night, Monday July 19th (actually 1am on tuesday July 20th)
+Wisp: Web-Lisp, a lisp dialect interpreted in javascript.
 
-significant progress on adding more common lisp language features.
- - Changed internal representation to be prop lisp linked-list structure,
-allowing for much more elegant solutions and hopefully future macros systems
-- Added primitive list processing functions to language like list, first, rest, cons
-- Added booleans, single-worded strings (weird, yes, reader needs to be smarter),
-and the 'cond' control expression
-- Allowed for 'infinite'-length procedures: eg "+", "-", "*", and "/" all take
-an arbitray number of parameters, same with lambda
-- Added 'def' to define variables in environment, allowing for longer files with
-multiple s-expressions and definitions. 
+Copyright (c) 2010 Paul Lambert
 
-E.g. this all works and correctly interprets:
-
-(def make-adder
-	(lambda (num1 num2)
-		(lambda (other)
-			(+ num1 num2 other))))
-		
-((make-adder 120 30) 100)
-
-==> returns 250
-
-(def printType
-	(lambda (item)
-		(cond
-			((atom? item) "atom!")
-			((empty? item) "empty!")
-			((list? item) "nonEmptyList!"))))
-
-(printType "sonia")
-
-==> returns "atom!"
-
-Comments would be nice to have.
-
-Morning of Tuesday:
-
-Just realized that recursion for 'def' already works implicitly!
-I think we are now turing-complete :)
-
-(def length
-	(lambda (ls)
-		(cond
-			((empty? ls) 0)
-			(else (+ 1 (length (rest ls))))
-			)))
-
-(length (list "hi" "there" "babe"))
-
-==> returns 3
+Licensed under the MIT license, included by reference: http://www.opensource.org/licenses/mit-license.php
 
 **/
 
-// Adding some string functions
-// from http://stackoverflow.com/questions/273789
-String.prototype.regexIndexOf = function(regex, startpos) {
-    var indexOf = this.substring(startpos || 0).search(regex);
-    return (indexOf >= 0) ? (indexOf + (startpos || 0)) : indexOf;
-};
-
-String.prototype.regexLastIndexOf = function(regex, startpos) {
-    regex = regex.global ? regex: new RegExp(regex.source, "g" + (regex.ignoreCase ? "i": "") + (regex.multiLine ? "m": ""));
-    if (typeof(startpos) == "undefined") {
-        startpos = this.length;
-    } else if (startpos < 0) {
-        startpos = 0;
-    }
-    var stringToWorkWith = this.substring(0, startpos + 1);
-    var lastIndexOf = -1;
-    var result, nextStop = 0;
-    while ((result = regex.exec(stringToWorkWith)) !== null) {
-        lastIndexOf = result.index;
-        regex.lastIndex = ++nextStop;
-    }
-    return lastIndexOf;
-};
-
-/* Adding empty? */
-String.prototype.isEmpty = function() {
-    return this.length === 0;
-};
+/****** Core Wisp
+Core Wisp data structures and internal functions for manipulating lists
+used by the interpreter.
+******/
 
 var wisp = {};
-
-/* parses ala Scheme read, types returned:
-	- numbers
-	- symbols (anything that isn't numeric)
-	- lists
-*/
-
-wisp.EOF = {
-    type: "EOF"
-};
-wisp.EOL = {
-    type: "EOL"
-};
-
 wisp.empty = []; // The empty list, end of all lists
+
 wisp.isEmpty = function(list) {
     return (list instanceof Array) && (list.length === 0);
 };
@@ -124,10 +40,10 @@ wisp.cons = function(first, rest) {
     if (!wisp.isCons(rest)) throw "Wisp error: must cons onto another list";
     return [first, rest];
 };
-wisp.append2 = function(list1, list2){
-	if(!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
-	if (wisp.isEmpty(list1)) return list2;
-	return wisp.cons(wisp.first(list1), wisp.append2(wisp.rest(list1), list2));
+wisp.append2 = function(list1, list2) {
+    if (!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
+    if (wisp.isEmpty(list1)) return list2;
+    return wisp.cons(wisp.first(list1), wisp.append2(wisp.rest(list1), list2));
 };
 wisp.first = function(list) {
     if (!wisp.isNonEmptyCons(list)) {
@@ -154,76 +70,10 @@ wisp.rest = function(list) {
     return list[1];
 };
 
-wisp._readIntoArray = function(wispScript, advance) {
-    if (wispScript.length === 0 || wispScript.length < advance['index']) return wisp.EOF;
-    var upToHere = wispScript.substring(advance['index']);
-    var nextChar = upToHere.trim()[0];
-    if (nextChar === ")") {
-        advance['index'] += upToHere.indexOf(")") + 1;
-        return wisp.EOL;
-    }
-    else if (nextChar !== "(") {
-        // find index of whichever comes first; whitespace or a close parens.
-        // return token up to there.
-        var closeParen, whiteSpace, endOfToken;
-        closeParen = upToHere.indexOf(")");
-        if (closeParen === -1) closeParen = Infinity;
-        whiteSpace = upToHere.regexIndexOf(/\S\s/) + 1;
-        if (whiteSpace < 1) whiteSpace = (wispScript.length - advance['index']);
-        endOfToken = (closeParen < whiteSpace) ? closeParen: whiteSpace;
-        var token = wispScript.substring(advance['index'], advance['index'] + endOfToken).trim();
-        advance['index'] += endOfToken;
-        return isNaN(parseFloat(token)) ? token: parseFloat(token);
-    }
-    else {
-        advance['index'] += upToHere.indexOf("(") + 1;
-        var val, sexp = [];
-        while (true) {
-            val = wisp._readIntoArray(wispScript, advance);
-            if (val === wisp.EOF) throw "Error: end of file reached without reaching list end";
-            if (val === wisp.EOL) break;
-            sexp.push(val);
-        }
-        return sexp;
-    }
+// creates nicely formatted representations of lists for printing 
+Array.prototype.toWispString = function() {
+    return this._toWispString(true);
 };
-
-wisp.removeCommentLines = function(wispScript){
-	var i, line, length, cleaned, lines = wispScript.split("\n");
-	length = lines.length; 
-	for (i = 0; i < length; i++){
-		line = lines[i];
-		if (line.trim()[0] === ";"){
-			delete lines[i]; 
-		}
-	}
-	cleaned = lines.join(" ");
-	return cleaned;
-};
-
-wisp.read = function(wispScript, advance) {
-    if (advance === undefined) {
-        advance = {
-            'index': 0
-        };
-    }
-    var arrd = wisp._readIntoArray(wispScript, advance);
-    return (arrd instanceof Array) ? arrd.toWispSexp() : arrd;
-};
-
-// converts array (such as that produced by _readIntoArray) into wisp sexp
-// inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
-Array.prototype.toWispSexp = function() {
-    var i, item, reversed, result = wisp.empty;
-    reversed = this.reverse();
-    for (i = 0; i < reversed.length; i++) {
-        item = reversed[i];
-        if (item instanceof Array) item = item.toWispSexp();
-        result = wisp.cons(item, result);
-    }
-    return result;
-};
-
 Array.prototype._toWispString = function(start) {
     if (!wisp.isCons(this)) throw "toWispString only applies to Wisp lists";
     if (wisp.isEmpty(this)) return "";
@@ -238,13 +88,92 @@ Array.prototype._toWispString = function(start) {
     return str;
 };
 
-Array.prototype.toWispString = function() {
-    return this._toWispString(true);
+/****** End Core Wisp ******/
+
+/****** Reader
+<document>
+******/
+
+wisp.EOF = {
+    type: "EOF"
+};
+wisp.EOL = {
+    type: "EOL" // end of line
+};
+wisp.COMMENT = {
+	type: "Comment"
 };
 
-/** End reader stuff **/
+wisp.read = function(wispScript, advance) {
+    if (advance === undefined) {
+        advance = {
+            'index': 0
+        };
+    }
+    var arrd = wisp._readIntoArray(wispScript, advance);
+    return (arrd instanceof Array) ? arrd.toWispSexp() : arrd;
+};
+wisp._readIntoArray = function(wispScript, advance) {
+    if (wispScript.length === 0 || wispScript.length <= advance['index']) return wisp.EOF;
+    var upToHere = wispScript.substring(advance['index']);
+    var nextChar = upToHere.trim()[0];
+    var token, pos;
+    switch (nextChar) {
+    case ")":
+        advance['index'] += upToHere.indexOf(")") + 1;
+        return wisp.EOL;
+    case "(":
+        advance['index'] += upToHere.indexOf("(") + 1;
+        var val, sexp = [];
+        while (true) {
+            val = wisp._readIntoArray(wispScript, advance);
+			if (val === wisp.COMMENT) continue;
+            if (val === wisp.EOL) break;
+            if (val === wisp.EOF) throw "Error: end of file reached without reaching list end";
+            sexp.push(val);
+        }
+        return sexp;
+    case "\"":
+        //string
+        pos = upToHere.substring(1).search(/[^\\]"/) + 3; //once for substring(1), twice for two char regex
+        token = upToHere.substring(0, pos).trim();
+        advance['index'] += pos;
+        return token;
+    case ";":
+		//single until-end-of-line comment
+        pos = (upToHere.search(/\n/) + 1) || wispScript.length;
+        advance['index'] += pos;
+        return wisp.COMMENT;
+    default:
+        var closeParen, whiteSpace, endOfToken;
+        closeParen = upToHere.indexOf(")");
+        if (closeParen === -1) closeParen = Infinity;
+        whiteSpace = upToHere.search(/\S\s/) + 1;
+        if (whiteSpace < 1) whiteSpace = (wispScript.length - advance['index']);
+        endOfToken = (closeParen < whiteSpace) ? closeParen: whiteSpace;
+        token = wispScript.substring(advance['index'], advance['index'] + endOfToken).trim();
+        advance['index'] += endOfToken;
+        return token;
+    }
+};
+// converts array (such as that produced by _readIntoArray) into wisp sexp
+// inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
+Array.prototype.toWispSexp = function() {
+    var i, item, reversed, result = wisp.empty;
+    reversed = this.reverse();
+    for (i = 0; i < reversed.length; i++) {
+        item = reversed[i];
+        if (item instanceof Array) item = item.toWispSexp();
+        result = wisp.cons(item, result);
+    }
+    return result;
+};
 
-/* Parser :: internal sexp -> WispAbstractSyntax */
+/****** End Reader ******/
+
+/****** Parser
+Parser :: read-produced sexp -> WispAbstractSyntax
+******/
 
 wisp.parseIsNumber = function(sexp) {
     return ! isNaN(parseFloat(sexp));
@@ -255,7 +184,10 @@ wisp.parseIsBoolean = function(sexp) {
 wisp.parseIsString = function(sexp) {
     return sexp[0] === "\"" && sexp[sexp.length - 1] === "\"";
 };
-
+wisp.parseArgs = function(list) {
+    if (wisp.isEmpty(list)) return list;
+    return wisp.cons(wisp.parse(wisp.first(list)), wisp.parseArgs(wisp.rest(list)));
+};
 wisp.parse = function(sexp) {
     if (wisp.parseIsNumber(sexp)) {
         return {
@@ -336,11 +268,24 @@ wisp.parse = function(sexp) {
     }
 };
 
-wisp.parseArgs = function(list) {
-    if (wisp.isEmpty(list)) return list;
-    return wisp.cons(wisp.parse(wisp.first(list)), wisp.parseArgs(wisp.rest(list)));
-};
+/****** End Parser ******/
 
+/****** Interpreter
+<document>
+******/
+
+wisp.interpArgs = function(args, env) {
+    if (wisp.isEmpty(args)) return args;
+    return wisp.cons(wisp.interp(wisp.first(args), env), wisp.interpArgs(wisp.rest(args), env));
+};
+wisp.interpCond = function(args, env) {
+    wisp.lastArgs = args;
+    if (wisp.isEmpty(args)) return args;
+    var cond = wisp.interp(wisp.first(args).funExpr, env);
+    if (!wisp.isBoolean(cond)) throw "Error in evaluating condition: " + cond + " is not a boolean";
+    if (cond) return wisp.first(wisp.interp(wisp.first(args).argsExpr, env));
+    else return wisp.interpCond(wisp.rest(args), env);
+};
 wisp.envLookup = function(symbol, env) {
     var val = env[symbol];
     if (val === undefined) {
@@ -349,20 +294,6 @@ wisp.envLookup = function(symbol, env) {
     else {
         return val;
     }
-};
-
-wisp.interpArgs = function(args, env) {
-    if (wisp.isEmpty(args)) return args;
-    return wisp.cons(wisp.interp(wisp.first(args), env), wisp.interpArgs(wisp.rest(args), env));
-};
-
-wisp.interpCond = function(args, env) {
-    wisp.lastArgs = args;
-    if (wisp.isEmpty(args)) return args;
-    var cond = wisp.interp(wisp.first(args).funExpr, env);
-    if (!wisp.isBoolean(cond)) throw "Error in evaluating condition: " + cond + " is not a boolean";
-    if (cond) return wisp.first(wisp.interp(wisp.first(args).argsExpr, env));
-    else return wisp.interpCond(wisp.rest(args), env);
 };
 
 wisp.addArgsToEnv = function(params, args, startingEnv) {
@@ -428,6 +359,12 @@ wisp.interp = function(expr, env) {
     }
 };
 
+/****** End Interpreter ******/
+
+/****** Primitives: functions and operations
+<document>
+******/
+
 wisp.basicEnv = {
     // arithmetic
     "+": function(args) {
@@ -482,25 +419,25 @@ wisp.basicEnv = {
         if (wisp.isAtom(first) && wisp.isAtom(second)) {
             return first === second;
         }
-		else if (wisp.isEmpty(first) && wisp.isEmpty(second)){
-			return true;
-		}
+        else if (wisp.isEmpty(first) && wisp.isEmpty(second)) {
+            return true;
+        }
         else if (wisp.isNonEmptyCons(first) && wisp.isNonEmptyCons(second)) {
-			var firsts = wisp.cons(wisp.first(first), wisp.cons(wisp.first(second), wisp.empty));
-			if (wisp.isEmpty(wisp.rest(first)) && wisp.isEmpty(wisp.rest(second))){
-				return arguments.callee(firsts);
-			}
-			var rests = wisp.cons(wisp.rest(first), wisp.cons(wisp.rest(second), wisp.empty));
+            var firsts = wisp.cons(wisp.first(first), wisp.cons(wisp.first(second), wisp.empty));
+            if (wisp.isEmpty(wisp.rest(first)) && wisp.isEmpty(wisp.rest(second))) {
+                return arguments.callee(firsts);
+            }
+            var rests = wisp.cons(wisp.rest(first), wisp.cons(wisp.rest(second), wisp.empty));
             return arguments.callee(firsts) && arguments.callee(rests);
         }
         else {
             return false;
         }
     },
-	"append": function(args){
-		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
-		return wisp.append2(wisp.first(args), arguments.callee(wisp.rest(args)));
-	},
+    "append": function(args) {
+        if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+        return wisp.append2(wisp.first(args), arguments.callee(wisp.rest(args)));
+    },
     // types
     "number?": function(args) {
         return wisp.isNumber(wisp.first(args));
@@ -511,47 +448,52 @@ wisp.basicEnv = {
     "string?": function(args) {
         return wisp.isSymbol(wisp.first(args));
     },
-	// pass through functions
-	"log": function(args){
-		console.log(args.toWispString());
-		return args;
-	}
+    // pass through functions
+    "log": function(args) {
+        console.log(args.toWispString());
+        return args;
+    }
 };
 
-//
+/****** End Primitives ******/
+
+/****** Browser Support
+<document>
+******/
+
 // Get all <link> tags with the 'rel' attribute set to "script/wisp"
 // Modified from less.js (http://github.com/cloudhead/less.js)
-//
-var links = document.getElementsByTagName('link');
-var typePattern = /^text\/(x-)?wisp$/;
-
 wisp.scripts = [];
-
-var i;
+var i, links = document.getElementsByTagName('link'),
+ 	typePattern = /^text\/(x-)?wisp$/;
 for (i = 0; i < links.length; i++) {
     if (links[i].rel === 'script/wisp' || (links[i].rel.match(/script/) && links[i].type.match(typePattern))) {
         wisp.scripts.push(links[i]);
     }
 }
 
-var val, advance, sexps, env = wisp.basicEnv,
-scriptIndex = 0;
-
+// Read and intert each script in order
+var val, advance, read, sexps, env = wisp.basicEnv, scriptIndex = 0;
 wisp.readNextScript = function() {
     $.get(wisp.scripts[scriptIndex].href,
     function(wispScript) {
-        wispScript = wisp.removeCommentLines(wispScript).trim();
+        // wispScript = wisp.removeCommentLines(wispScript).trim();
+		wispScript = wispScript.trim();
         advance = {
             'index': 0
         };
         sexps = [];
         while (advance['index'] < wispScript.length) {
-            sexps.push(wisp.read(wispScript, advance));
+			read = wisp.read(wispScript, advance);
+			if (read !== wisp.COMMENT && read !== wisp.EOF){
+				sexps.push(read);
+			}
         }
         for (i = 0; i < sexps.length; i++) {
             val = wisp.interp(wisp.parse(sexps[i]), env);
         }
         var str = wisp.isCons(val) ? val.toWispString() : val;
+        console.log(wisp.scripts[scriptIndex].href + " returned:  \n" + str);
         $("body").html("Wisp script returned: " + str);
         scriptIndex++;
         if (scriptIndex < wisp.scripts.length) {
