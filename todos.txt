@@ -1,14 +1,14 @@
 - macros (may precipitate removal of abstract syntax in interpreter?)
 - namespaces
-- sequences 
-- ' and quote
+- sequences
+- boolean basic operators
 - compare to clojure basic read types
 - Better error messages
 - mutation / while loop
 - lazy evaluation (want infinite lists, etc..)
 - continuations (want a call/cc structure)
 - objects/type system/define-type?
-- tests
 - add toWispString() to objects (for closure printing, etc..)
-- implement each: (CL dolist more or less)
-- Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory.
+- Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory. Maybe JS takes care of this?
+- Exception Handling
+- Access to Dom? Perhaps can drop down to jquery, or at least use jquery selectors natively e.g. (append ("#mydiv") "wicked"). Or something.

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	<style>
+		input, textarea {
+			font-size: 14pt;
+			width: 600px;
+		}
+		textarea {
+			height: 300px;
+		}
+	</style>
+	<script type="text/javascript" src="jquery.js"></script>
+	<link rel="script/wisp" href="basiclib.wisp" type="text/wisp" />
+	<link rel="script/wisp" href="repl.wisp" type="text/wisp" />
+	<script type="text/javascript" src="wisp.js"></script>
+	<script>
+		var addToTexArea = function(text){
+			var el = document.getElementById("out");
+			el.value = el.value + text + "\n";
+			el.scrollTop = el.scrollHeight; // scroll to bottom
+		};
+	</script>
+    <title>Wisp: Read Eval Print Loop</title>
+  </head>
+  <body>
+  </body>
+</html>

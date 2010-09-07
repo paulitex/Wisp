@@ -14,7 +14,6 @@ used by the interpreter.
 
 var wisp = {};
 wisp.empty = []; // The empty list, end of all lists
-
 wisp.isEmpty = function(list) {
     return (list instanceof Array) && (list.length === 0);
 };
@@ -40,16 +39,15 @@ wisp.cons = function(first, rest) {
     if (!wisp.isCons(rest)) throw "Wisp error: must cons onto another list";
     return [first, rest];
 };
-wisp.append2 = function(list1, list2) {
-    if (!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
-    if (wisp.isEmpty(list1)) return list2;
-    return wisp.cons(wisp.first(list1), wisp.append2(wisp.rest(list1), list2));
-};
 wisp.first = function(list) {
     if (!wisp.isNonEmptyCons(list)) {
         throw "Wisp error: first is only defined for non-empty lists";
     }
     return list[0];
+};
+wisp.rest = function(list) {
+    if (!wisp.isNonEmptyCons(list)) throw "Wisp error: rest is only defined for non-empty lists";
+    return list[1];
 };
 wisp.second = function(list) {
     return wisp.first(wisp.rest(list));
@@ -65,9 +63,10 @@ wisp.seconds = function(list) {
     if (wisp.isEmpty(list)) return list;
     return wisp.cons(wisp.second(wisp.first(list)), wisp.seconds(wisp.rest(list)));
 };
-wisp.rest = function(list) {
-    if (!wisp.isNonEmptyCons(list)) throw "Wisp error: rest is only defined for non-empty lists";
-    return list[1];
+wisp.append = function(list1, list2) {
+    if (!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
+    if (wisp.isEmpty(list1)) return list2;
+    return wisp.cons(wisp.first(list1), wisp.append(wisp.rest(list1), list2));
 };
 
 // creates nicely formatted representations of lists for printing 
@@ -101,7 +100,20 @@ wisp.EOL = {
     type: "EOL" // end of line
 };
 wisp.COMMENT = {
-	type: "Comment"
+    type: "Comment"
+};
+
+// converts array (such as that produced by _readIntoArray) into wisp sexp
+// inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
+Array.prototype.toWispSexp = function() {
+    var i, item, reversed, result = wisp.empty;
+    reversed = this.reverse();
+    for (i = 0; i < reversed.length; i++) {
+        item = reversed[i];
+        if (item instanceof Array) item = item.toWispSexp();
+        result = wisp.cons(item, result);
+    }
+    return result;
 };
 
 wisp.read = function(wispScript, advance) {
@@ -127,7 +139,7 @@ wisp._readIntoArray = function(wispScript, advance) {
         var val, sexp = [];
         while (true) {
             val = wisp._readIntoArray(wispScript, advance);
-			if (val === wisp.COMMENT) continue;
+            if (val === wisp.COMMENT) continue;
             if (val === wisp.EOL) break;
             if (val === wisp.EOF) throw "Error: end of file reached without reaching list end";
             sexp.push(val);
@@ -135,12 +147,18 @@ wisp._readIntoArray = function(wispScript, advance) {
         return sexp;
     case "\"":
         //string
-        pos = upToHere.substring(1).search(/[^\\]"/) + 3; //once for substring(1), twice for two char regex
+        var begin = upToHere.indexOf(nextChar);
+        pos = upToHere.substring(begin).search(/[^\\]"/) + begin + 2; //twice for two char regex
         token = upToHere.substring(0, pos).trim();
         advance['index'] += pos;
         return token;
+    case "'":
+        //quote
+        advance['index'] += upToHere.indexOf("'") + 1;
+        token = wisp._readIntoArray(wispScript, advance);
+        return ["quote", token];
     case ";":
-		//single until-end-of-line comment
+        //single until-end-of-line comment
         pos = (upToHere.search(/\n/) + 1) || wispScript.length;
         advance['index'] += pos;
         return wisp.COMMENT;
@@ -155,18 +173,6 @@ wisp._readIntoArray = function(wispScript, advance) {
         advance['index'] += endOfToken;
         return token;
     }
-};
-// converts array (such as that produced by _readIntoArray) into wisp sexp
-// inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
-Array.prototype.toWispSexp = function() {
-    var i, item, reversed, result = wisp.empty;
-    reversed = this.reverse();
-    for (i = 0; i < reversed.length; i++) {
-        item = reversed[i];
-        if (item instanceof Array) item = item.toWispSexp();
-        result = wisp.cons(item, result);
-    }
-    return result;
 };
 
 /****** End Reader ******/
@@ -188,6 +194,29 @@ wisp.parseArgs = function(list) {
     if (wisp.isEmpty(list)) return list;
     return wisp.cons(wisp.parse(wisp.first(list)), wisp.parseArgs(wisp.rest(list)));
 };
+wisp.parseTypes = function(sexp) {
+    if ((typeof sexp) === "string") {
+        if (wisp.parseIsNumber(sexp)) {
+            return parseFloat(sexp);
+        }
+        else if (wisp.parseIsBoolean(sexp)) {
+            return sexp === "true";
+        }
+        else if (wisp.parseIsString(sexp)) {
+            return sexp.substring(1, sexp.length - 1).replace("\\\"", "\"");
+        }
+        else if (wisp.isSymbol(sexp)) {
+            return sexp;
+        }
+    }
+    else if (wisp.isCons(sexp)) {
+        if (wisp.isEmpty(sexp)) return sexp;
+        else return wisp.cons(wisp.parseTypes(wisp.first(sexp)), wisp.parseTypes(wisp.rest(sexp)));
+    }
+    else {
+        throw "Parse Error: Given s-expression neither basic data type or cons";
+    }
+};
 wisp.parse = function(sexp) {
     if (wisp.parseIsNumber(sexp)) {
         return {
@@ -204,7 +233,7 @@ wisp.parse = function(sexp) {
     else if (wisp.parseIsString(sexp)) {
         return {
             type: "string",
-            val: sexp.substring(1, sexp.length - 1)
+            val: sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"")
         };
     }
     else if (wisp.isSymbol(sexp)) {
@@ -230,6 +259,12 @@ wisp.parse = function(sexp) {
                     type: "argList",
                     val: wisp.parseArgs(wisp.seconds(wisp.second(sexp)))
                 }
+            };
+        case "quote":
+            return {
+                type:
+                "quote",
+                val: wisp.parseTypes(wisp.second(sexp))
             };
         case "lambda":
             return {
@@ -286,8 +321,21 @@ wisp.interpCond = function(args, env) {
     if (cond) return wisp.first(wisp.interp(wisp.first(args).argsExpr, env));
     else return wisp.interpCond(wisp.rest(args), env);
 };
+
+wisp.envSet = function(param, val, env) {
+    var ns = env[env['__currentNamespace']];
+    ns[param] = val;
+};
 wisp.envLookup = function(symbol, env) {
-    var val = env[symbol];
+    var val;
+    // look in current namespaces
+    var i, cn = env['__currentNamespace'];
+    for (i = 0; i < (cn.length && val === undefined); i++) {
+        val = env[cn][symbol];
+    }
+    // then look in global namespaces
+    if (val === undefined) val = env[symbol];
+
     if (val === undefined) {
         throw "given symbol name '" + symbol + "' not in environment";
     }
@@ -295,20 +343,30 @@ wisp.envLookup = function(symbol, env) {
         return val;
     }
 };
-
+wisp.copyEnv = function(oldEnv) {
+    var newEnv, i, spaces = oldEnv['__allNamespaces'];
+    newEnv = $.extend({},
+    oldEnv); // shallow copy, will need to extend for namesspaces
+    for (i = 0; i < spaces.length; i++) {
+        newEnv[spaces[i]] = $.extend({},
+        oldEnv[spaces[i]]);
+    }
+    return newEnv;
+};
 wisp.addArgsToEnv = function(params, args, startingEnv) {
     if (wisp.isEmpty(params)) {
-        startingEnv['argslist'] = args;
+        wisp.envSet('_argslist', args, startingEnv);
         return startingEnv;
     }
     else if (wisp.isEmpty(args)) {
+        console.log("somethings wrong!, params:" + params);
         throw "Wisp error: insufficient number of arguments given";
     }
     else {
         var env, sym = wisp.first(params),
         val = wisp.first(args);
         env = wisp.addArgsToEnv(wisp.rest(params), wisp.rest(args), startingEnv);
-        env[sym] = val;
+        wisp.envSet(sym, val, env);
         return env;
     }
 };
@@ -323,6 +381,8 @@ wisp.interp = function(expr, env) {
         return expr.val;
     case "string":
         return expr.val;
+    case "quote":
+        return expr.val;
     case "sym":
         return wisp.envLookup(expr.val, env);
     case "argList":
@@ -331,16 +391,15 @@ wisp.interp = function(expr, env) {
         return wisp.interpCond(expr.val, env);
     case "def":
         val = wisp.interp(expr.body, env);
-        env[expr.param] = val;
+        wisp.envSet(expr.param, val, env);
         if (typeof val === "object" && val.type && val.type === "closure") {
             // give self reference to allow for recursion
-            val.savedEnv[expr.param] = val;
+            wisp.envSet(expr.param, val, val.savedEnv);
         }
         return expr.param;
     case "lambda":
         // create and return a closure
-        newEnv = $.extend({},
-        env); // shallow copy, will need to extend for namesspaces, function re-definition
+        newEnv = wisp.copyEnv(env);
         return {
             type: "closure",
             body: expr.body,
@@ -351,10 +410,14 @@ wisp.interp = function(expr, env) {
         closure = wisp.interp(expr.funExpr, env);
         args = wisp.interp(expr.argsExpr, env);
         if (typeof closure === "function") {
-            return closure(args);
+            return closure(args, env);
         }
-        return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+        else if (typeof closure === "object" && closure.type && closure.type === "closure") {
+            return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+        }
+        throw "Function expression return a invalid closure value: " + closure;
     default:
+		console.log(expr);
         throw "Interpreter error, unknown abstract syntax type";
     }
 };
@@ -366,10 +429,13 @@ wisp.interp = function(expr, env) {
 ******/
 
 wisp.basicEnv = {
-    // arithmetic
+    '__currentNamespace': "default",
+    '__allNamespaces': ["default"],
+    // Global Namespace
+    // arithmetic 
+    // both addition and concatenation
     "+": function(args) {
-        if (wisp.isEmpty(args)) return 0;
-        return wisp.first(args) + arguments.callee(wisp.rest(args));
+        return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : wisp.first(args) + arguments.callee(wisp.rest(args));
     },
 
     "-": function(args) {
@@ -436,7 +502,7 @@ wisp.basicEnv = {
     },
     "append": function(args) {
         if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
-        return wisp.append2(wisp.first(args), arguments.callee(wisp.rest(args)));
+        return wisp.append(wisp.first(args), arguments.callee(wisp.rest(args)));
     },
     // types
     "number?": function(args) {
@@ -450,8 +516,57 @@ wisp.basicEnv = {
     },
     // pass through functions
     "log": function(args) {
-        console.log(args.toWispString());
-        return args;
+        if (wisp.isEmpty(args)) return wisp.empty;
+        else {
+            console.log(wisp.first(args));
+            return wisp.cons(wisp.first(args), arguments.callee(wisp.rest(args)));
+        }
+    },
+
+    // pass through functions
+    "split": function(args) {
+        var split_array = wisp.second(args).split(wisp.first(args));
+        return split_array.toWispSexp();
+    },
+
+    "write": function(args) {
+        document.write(wisp.first(args));
+        return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : arguments.callee(wisp.rest(args));
+    },
+
+    "append-body": function(args) {
+       $("body").append(wisp.first(args));
+        return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : arguments.callee(wisp.rest(args));
+    },
+
+    "writeln": function(args) {
+        document.writeln(wisp.first(args));
+        return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : arguments.callee(wisp.rest(args));
+    },
+
+    // default namespace used for user definitions
+    "default": {},
+    "set-ns": function(args, env) {
+        var i, name = wisp.first(args),
+        found = false,
+        spaces = env['__allNamespaces'];
+        for (i = 0; i < spaces.length; i++) {
+            if (spaces[i] === name) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            // name = wisp.interp(wisp.parse(name), env);
+            if (!wisp.isSymbol(name)) throw "namespace must be a string";
+            env[name] = {};
+            spaces.push(name);
+        }
+        env['__currentNamespace'] = name;
+        return name;
+    },
+    "get-ns": function(args, env) {
+        return env['__currentNamespace'];
     }
 };
 
@@ -465,36 +580,35 @@ wisp.basicEnv = {
 // Modified from less.js (http://github.com/cloudhead/less.js)
 wisp.scripts = [];
 var i, links = document.getElementsByTagName('link'),
- 	typePattern = /^text\/(x-)?wisp$/;
+typePattern = /^text\/(x-)?wisp$/;
 for (i = 0; i < links.length; i++) {
     if (links[i].rel === 'script/wisp' || (links[i].rel.match(/script/) && links[i].type.match(typePattern))) {
         wisp.scripts.push(links[i]);
     }
 }
 
-// Read and intert each script in order
-var val, advance, read, sexps, env = wisp.basicEnv, scriptIndex = 0;
+// Read and interp each script in order
+var val, advance, read, sexps, env = wisp.basicEnv,
+scriptIndex = 0;
 wisp.readNextScript = function() {
     $.get(wisp.scripts[scriptIndex].href,
     function(wispScript) {
-        // wispScript = wisp.removeCommentLines(wispScript).trim();
-		wispScript = wispScript.trim();
+        wispScript = wispScript.trim();
         advance = {
             'index': 0
         };
         sexps = [];
         while (advance['index'] < wispScript.length) {
-			read = wisp.read(wispScript, advance);
-			if (read !== wisp.COMMENT && read !== wisp.EOF){
-				sexps.push(read);
-			}
+            read = wisp.read(wispScript, advance);
+            if (read !== wisp.COMMENT && read !== wisp.EOF) {
+                sexps.push(read);
+            }
         }
         for (i = 0; i < sexps.length; i++) {
             val = wisp.interp(wisp.parse(sexps[i]), env);
         }
         var str = wisp.isCons(val) ? val.toWispString() : val;
         console.log(wisp.scripts[scriptIndex].href + " returned:  \n" + str);
-        $("body").html("Wisp script returned: " + str);
         scriptIndex++;
         if (scriptIndex < wisp.scripts.length) {
             wisp.readNextScript();
@@ -503,3 +617,6 @@ wisp.readNextScript = function() {
 };
 
 if (wisp.scripts.length > 0) wisp.readNextScript();
+
+/****** End Browser Support ******/
+
