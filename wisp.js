@@ -188,11 +188,7 @@ wisp.parseIsBoolean = function(sexp) {
     return sexp === "true" || sexp === "false";
 };
 wisp.parseIsString = function(sexp) {
-    return sexp[0] === "\"" && sexp[sexp.length - 1] === "\"";
-};
-wisp.parseArgs = function(list) {
-    if (wisp.isEmpty(list)) return list;
-    return wisp.cons(wisp.parse(wisp.first(list)), wisp.parseArgs(wisp.rest(list)));
+    return ((typeof sexp) === "string") && sexp[0] === "\"" && sexp[sexp.length - 1] === "\"";
 };
 wisp.parseTypes = function(sexp) {
     if ((typeof sexp) === "string") {
@@ -217,91 +213,6 @@ wisp.parseTypes = function(sexp) {
         throw "Parse Error: Given s-expression neither basic data type or cons";
     }
 };
-wisp.parse = function(sexp) {
-    if (wisp.parseIsNumber(sexp)) {
-        return {
-            type: "num",
-            val: parseFloat(sexp)
-        };
-    }
-    else if (wisp.parseIsBoolean(sexp)) {
-        return {
-            type: "bool",
-            val: sexp === "true"
-        };
-    }
-    else if (wisp.parseIsString(sexp)) {
-        return {
-            type: "string",
-            val: sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"")
-        };
-    }
-    else if (wisp.isSymbol(sexp)) {
-        return {
-            type: "sym",
-            val: sexp
-        };
-    }
-    else if (wisp.isCons(sexp)) {
-        switch (wisp.first(sexp)) {
-        case "let":
-            // this could be done in a later macro? e.g. make let a macro
-            // turn substitution into function application
-            return {
-                type:
-                "app",
-                funExpr: {
-                    type: "lambda",
-                    params: wisp.firsts(wisp.second(sexp)),
-                    body: wisp.parse(wisp.third(sexp))
-                },
-                argsExpr: {
-                    type: "argList",
-                    val: wisp.parseArgs(wisp.seconds(wisp.second(sexp)))
-                }
-            };
-        case "quote":
-            return {
-                type:
-                "quote",
-                val: wisp.parseTypes(wisp.second(sexp))
-            };
-        case "lambda":
-            return {
-                type:
-                "lambda",
-                params: wisp.second(sexp),
-                body: wisp.parse(wisp.third(sexp))
-            };
-        case "cond":
-            return {
-                type:
-                "cond",
-                val: wisp.parseArgs(wisp.rest(sexp))
-            };
-        case "def":
-            return {
-                type:
-                "def",
-                param: wisp.second(sexp),
-                body: wisp.parse(wisp.third(sexp))
-            };
-        default:
-            return {
-                type:
-                "app",
-                funExpr: wisp.parse(wisp.first(sexp)),
-                argsExpr: {
-                    type: "argList",
-                    val: wisp.parseArgs(wisp.rest(sexp))
-                }
-            };
-        }
-    }
-    else {
-        throw "Parse Error: Given s-expression neither number, symbol, or cons";
-    }
-};
 
 /****** End Parser ******/
 
@@ -314,11 +225,10 @@ wisp.interpArgs = function(args, env) {
     return wisp.cons(wisp.interp(wisp.first(args), env), wisp.interpArgs(wisp.rest(args), env));
 };
 wisp.interpCond = function(args, env) {
-    wisp.lastArgs = args;
     if (wisp.isEmpty(args)) return args;
-    var cond = wisp.interp(wisp.first(args).funExpr, env);
+    var cond = wisp.interp(wisp.first(wisp.first(args)), env);
     if (!wisp.isBoolean(cond)) throw "Error in evaluating condition: " + cond + " is not a boolean";
-    if (cond) return wisp.first(wisp.interp(wisp.first(args).argsExpr, env));
+    if (cond) return wisp.interp(wisp.second(wisp.first(args)), env);
     else return wisp.interpCond(wisp.rest(args), env);
 };
 
@@ -372,53 +282,56 @@ wisp.addArgsToEnv = function(params, args, startingEnv) {
 };
 
 /* parsed abstract wisp syntax => final value (number, closure) */
-wisp.interp = function(expr, env) {
+wisp.interp = function(sexp, env) {
     var closure, args, paramsList, val, newEnv;
-    switch (expr.type) {
-    case "num":
-        return expr.val;
-    case "bool":
-        return expr.val;
-    case "string":
-        return expr.val;
-    case "quote":
-        return expr.val;
-    case "sym":
-        return wisp.envLookup(expr.val, env);
-    case "argList":
-        return wisp.interpArgs(expr.val, env);
-    case "cond":
-        return wisp.interpCond(expr.val, env);
-    case "def":
-        val = wisp.interp(expr.body, env);
-        wisp.envSet(expr.param, val, env);
-        if (typeof val === "object" && val.type && val.type === "closure") {
-            // give self reference to allow for recursion
-            wisp.envSet(expr.param, val, val.savedEnv);
+    if (wisp.parseIsNumber(sexp)) return parseFloat(sexp);
+    else if (wisp.parseIsBoolean(sexp)) return sexp === "true";
+    else if (wisp.parseIsString(sexp)) return sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"");
+    else if (wisp.isSymbol(sexp)) return wisp.envLookup(sexp, env);
+    else if (wisp.isCons(sexp)) {
+        switch (wisp.first(sexp)) {
+        case "let":
+            // transform in function application
+			args = wisp.seconds(wisp.second(sexp));
+			var body = wisp.third(sexp);
+			paramsList = wisp.firsts(wisp.second(sexp));
+			var fun = wisp.cons("lambda", wisp.cons(paramsList, wisp.cons(body, wisp.empty)));
+			return wisp.interp(wisp.cons(fun, args), env);
+        case "quote":
+            return wisp.parseTypes(wisp.second(sexp));
+        case "lambda":
+            newEnv = wisp.copyEnv(env);
+            return {
+                type: "closure",
+                body: wisp.third(sexp),
+                params: wisp.second(sexp),
+                savedEnv: newEnv
+            };
+        case "cond":
+            return wisp.interpCond(wisp.rest(sexp), env);
+        case "def":
+            val = wisp.interp(wisp.third(sexp), env);
+            wisp.envSet(wisp.second(sexp), val, env);
+            if (typeof val === "object" && val.type && val.type === "closure") {
+                // give self reference to allow for recursion
+                wisp.envSet(wisp.second(sexp), val, val.savedEnv);
+            }
+            return wisp.second(sexp);
+        default:
+            // function application
+            closure = wisp.interp(wisp.first(sexp), env);
+            args = wisp.interpArgs(wisp.rest(sexp), env);
+            if (typeof closure === "function") {
+                return closure(args, env);
+            }
+            else if (typeof closure === "object" && closure.type && closure.type === "closure") {
+                return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+            }
+			throw "Function expression is invalid: " + closure;
         }
-        return expr.param;
-    case "lambda":
-        // create and return a closure
-        newEnv = wisp.copyEnv(env);
-        return {
-            type: "closure",
-            body: expr.body,
-            params: expr.params,
-            savedEnv: newEnv
-        };
-    case "app":
-        closure = wisp.interp(expr.funExpr, env);
-        args = wisp.interp(expr.argsExpr, env);
-        if (typeof closure === "function") {
-            return closure(args, env);
-        }
-        else if (typeof closure === "object" && closure.type && closure.type === "closure") {
-            return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
-        }
-        throw "Function expression return a invalid closure value: " + closure;
-    default:
-		console.log(expr);
-        throw "Interpreter error, unknown abstract syntax type";
+    }
+    else {
+        throw "Wisp Error: Given s-expression " + sexp + " of unknown type";
     }
 };
 
@@ -535,7 +448,7 @@ wisp.basicEnv = {
     },
 
     "append-body": function(args) {
-       $("body").append(wisp.first(args));
+        $("body").append(wisp.first(args));
         return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : arguments.callee(wisp.rest(args));
     },
 
@@ -557,7 +470,6 @@ wisp.basicEnv = {
             }
         }
         if (!found) {
-            // name = wisp.interp(wisp.parse(name), env);
             if (!wisp.isSymbol(name)) throw "namespace must be a string";
             env[name] = {};
             spaces.push(name);
@@ -605,7 +517,7 @@ wisp.readNextScript = function() {
             }
         }
         for (i = 0; i < sexps.length; i++) {
-            val = wisp.interp(wisp.parse(sexps[i]), env);
+            val = wisp.interp(sexps[i], env);
         }
         var str = wisp.isCons(val) ? val.toWispString() : val;
         console.log(wisp.scripts[scriptIndex].href + " returned:  \n" + str);

@@ -1,4 +1,4 @@
-- macros (may precipitate removal of abstract syntax in interpreter?)
+- macros
 - namespaces
 - sequences
 - boolean basic operators
