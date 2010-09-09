@@ -85,7 +85,7 @@ Array.prototype._toWispString = function(start) {
     if (start) str = str + ")";
     return str;
 };
-
+Array.prototype.toString = Array.prototype.toWispString;
 /****** End Core Wisp ******/
 
 /****** Reader
@@ -276,6 +276,13 @@ wisp.addArgsToEnv = function(params, args, startingEnv) {
         return env;
     }
 };
+wisp.macroExpand = function(macroExpr, args, env) {
+    var macro = wisp.interp(macroExpr, env);
+	if (typeof macro === "object" && macro.type && macro.type === "macroClosure"){
+    		return wisp.interp(macro.body, wisp.addArgsToEnv(macro.params, args, macro.savedEnv));
+	}
+	throw "given expression " + macroExpr + " is not a macro and thus cannot be expanded";
+};
 
 /** End Interp Logic Helpers **/
 
@@ -290,11 +297,11 @@ wisp.interp = function(sexp, env) {
         switch (wisp.first(sexp)) {
         case "let":
             // transform into function application
-			args = wisp.seconds(wisp.second(sexp));
-			var body = wisp.third(sexp);
-			paramsList = wisp.firsts(wisp.second(sexp));
-			var fun = wisp.cons("lambda", wisp.cons(paramsList, wisp.cons(body, wisp.empty)));
-			return wisp.interp(wisp.cons(fun, args), env);
+            args = wisp.seconds(wisp.second(sexp));
+            var body = wisp.third(sexp);
+            paramsList = wisp.firsts(wisp.second(sexp));
+            var fun = wisp.cons("lambda", wisp.cons(paramsList, wisp.cons(body, wisp.empty)));
+            return wisp.interp(wisp.cons(fun, args), env);
         case "quote":
             return wisp.parseTypes(wisp.second(sexp));
         case "lambda":
@@ -305,6 +312,16 @@ wisp.interp = function(sexp, env) {
                 params: wisp.second(sexp),
                 savedEnv: newEnv
             };
+        case "macro":
+            newEnv = wisp.copyEnv(env);
+            return {
+                type: "macroClosure",
+                body: wisp.third(sexp),
+                params: wisp.second(sexp),
+                savedEnv: newEnv
+            };
+        case "macroexpand":
+            return wisp.macroExpand(wisp.first(wisp.first(wisp.rest(sexp))), wisp.rest(wisp.first(wisp.rest(sexp))), env);
         case "cond":
             return wisp.interpCond(wisp.rest(sexp), env);
         case "def":
@@ -316,16 +333,22 @@ wisp.interp = function(sexp, env) {
             }
             return wisp.second(sexp);
         default:
-            // function application
+            // function & macro application
             closure = wisp.interp(wisp.first(sexp), env);
             args = wisp.interpArgs(wisp.rest(sexp), env);
             if (typeof closure === "function") {
                 return closure(args, env);
             }
-            else if (typeof closure === "object" && closure.type && closure.type === "closure") {
-                return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+            else if (typeof closure === "object" && closure.type) {
+                if (closure.type === "closure") {
+                    return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+                }
+                else if (closure.type === "macroClosure") {
+					console.log("calling macro");
+                    return wisp.interp(wisp.macroExpand(wisp.first(sexp), wisp.rest(sexp), env), env);
+                }
             }
-			throw "Function expression is invalid: " + closure;
+            throw "Function expression is invalid: " + closure;
         }
     }
     else {
@@ -414,6 +437,9 @@ wisp.basicEnv = {
     "append": function(args) {
         if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
         return wisp.append(wisp.first(args), arguments.callee(wisp.rest(args)));
+    },
+    "read": function(args) {
+        return wisp.read(wisp.first(args));
     },
     // types
     "number?": function(args) {
