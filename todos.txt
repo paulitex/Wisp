@@ -1,5 +1,8 @@
 - macros
-- namespaces
+- namespaces (review concept, use and test)
+- 'native' (aka javascript) function interface
+	=> Idea: have user add to wisp.userFunctions and object similar to basic env in syntax & interface.
+			All functions added get mixed in under keyed namespace
 - sequences
 - boolean basic operators
 - compare to clojure basic read types

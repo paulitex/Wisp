@@ -8,8 +8,7 @@ Licensed under the MIT license, included by reference: http://www.opensource.org
 **/
 
 /****** Core Wisp
-Core Wisp data structures and internal functions for manipulating lists
-used by the interpreter.
+Core Wisp data structures and internal functions for manipulating lists.
 ******/
 
 var wisp = {};
@@ -90,7 +89,7 @@ Array.prototype._toWispString = function(start) {
 /****** End Core Wisp ******/
 
 /****** Reader
-<document>
+Consumes strings representing wisp s-expressions and produces corresponding internal list structures
 ******/
 
 wisp.EOF = {
@@ -177,10 +176,11 @@ wisp._readIntoArray = function(wispScript, advance) {
 
 /****** End Reader ******/
 
-/****** Parser
-Parser :: read-produced sexp -> WispAbstractSyntax
+/****** Interpreter
+Consumes list structures produced by the reader and produces values: basic types, or functions
 ******/
 
+/** Parsing Helpers **/
 wisp.parseIsNumber = function(sexp) {
     return ! isNaN(parseFloat(sexp));
 };
@@ -213,13 +213,9 @@ wisp.parseTypes = function(sexp) {
         throw "Parse Error: Given s-expression neither basic data type or cons";
     }
 };
+/** End Parsing Helpers **/
 
-/****** End Parser ******/
-
-/****** Interpreter
-<document>
-******/
-
+/** Interp Logic Helpers **/
 wisp.interpArgs = function(args, env) {
     if (wisp.isEmpty(args)) return args;
     return wisp.cons(wisp.interp(wisp.first(args), env), wisp.interpArgs(wisp.rest(args), env));
@@ -281,7 +277,9 @@ wisp.addArgsToEnv = function(params, args, startingEnv) {
     }
 };
 
-/* parsed abstract wisp syntax => final value (number, closure) */
+/** End Interp Logic Helpers **/
+
+/* Main Interpreter: read-produced lists => wisp values */
 wisp.interp = function(sexp, env) {
     var closure, args, paramsList, val, newEnv;
     if (wisp.parseIsNumber(sexp)) return parseFloat(sexp);
@@ -291,7 +289,7 @@ wisp.interp = function(sexp, env) {
     else if (wisp.isCons(sexp)) {
         switch (wisp.first(sexp)) {
         case "let":
-            // transform in function application
+            // transform into function application
 			args = wisp.seconds(wisp.second(sexp));
 			var body = wisp.third(sexp);
 			paramsList = wisp.firsts(wisp.second(sexp));
