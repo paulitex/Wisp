@@ -324,6 +324,9 @@ wisp.interp = function(sexp, env) {
             return wisp.macroExpand(wisp.first(wisp.first(wisp.rest(sexp))), wisp.rest(wisp.first(wisp.rest(sexp))), env);
         case "cond":
             return wisp.interpCond(wisp.rest(sexp), env);
+		case "eval":
+			var evald = wisp.interp(wisp.interp(wisp.first(wisp.rest(sexp)), env), env);
+			return evald;
         case "def":
             val = wisp.interp(wisp.third(sexp), env);
             wisp.envSet(wisp.second(sexp), val, env);
@@ -345,7 +348,7 @@ wisp.interp = function(sexp, env) {
                 }
                 else if (closure.type === "macroClosure") {
 					console.log("calling macro");
-                    return wisp.interp(wisp.macroExpand(wisp.first(sexp), wisp.rest(sexp), env), env);
+                    return wisp.interp(wisp.macroExpand(wisp.first(sexp), wisp.rest(sexp), env), closure.savedEnv);
                 }
             }
             throw "Function expression is invalid: " + closure;
@@ -481,6 +484,10 @@ wisp.basicEnv = {
         return wisp.isEmpty(wisp.rest(args)) ? wisp.first(args) : arguments.callee(wisp.rest(args));
     },
 
+	"random": function(args){
+		if (wisp.isEmpty(args)) return Math.random();
+		else return Math.floor(Math.random() * wisp.first(args));
+	},
     // default namespace used for user definitions
     "default": {},
     "set-ns": function(args, env) {

@@ -54,6 +54,12 @@
 			
 (def each 
 	(lambda (ls fn) (map fn ls)))
+	
+(def pickn 
+	(lambda (n ls)
+		(cond
+			((eq? 0 n) (first ls))
+			(else (pickn (- n 1) (rest ls))))))
 			
 ;(defmacro deftags (tags body)
 ;	(map (lambda (tag) 

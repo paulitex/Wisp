@@ -1,9 +1,9 @@
-- macros
+- macros (simple case already implemented, need quote/uquote/splice operations use CL's ~ and ~@. Is backquote necessary? Just make backquote and quote the same)
 - namespaces (review concept, use and test)
 - 'native' (aka javascript) function interface
 	=> Idea: have user add to wisp.userFunctions and object similar to basic env in syntax & interface.
 			All functions added get mixed in under keyed namespace
-- sequences
+- sequences (do expr1 expr2 ... exprn) => evaluates each expression and returns expression n
 - boolean basic operators
 - compare to clojure basic read types
 - Better error messages
@@ -15,3 +15,6 @@
 - Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory. Maybe JS takes care of this?
 - Exception Handling
 - Access to Dom? Perhaps can drop down to jquery, or at least use jquery selectors natively e.g. (append ("#mydiv") "wicked"). Or something.
+- Improve test coverage
+- docstrings in wisp
+- better documentation all around
