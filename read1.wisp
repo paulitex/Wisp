@@ -20,3 +20,6 @@
 (set-ns "default")
 
 (length (list "hi my friends, how are you?" "that's swell")) 
+
+(def santa '(ho ho))
+(backquote (a (unquote-splice santa) b c))

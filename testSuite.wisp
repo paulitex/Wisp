@@ -45,7 +45,19 @@
 (append-body (h2 "Global Namespace Functions"))
 
 (test "two strings are equal" "string1" "string1")
-	
+
+
+;; Quoting, backquoting and splicing
+(append-body (h2 "Quoting, Backquoting, and Splicing"))
+(test "backquote splicing"
+	(let ((v '(oh boy)))
+		`(zap ~@v ~v)) '(zap oh boy (oh boy)))
+		
+
+(append-body (h2 "Standard Library Macros"))
+(test "letseq"
+	(letseq ((x 4) (y (+ x x)) (z (+ y y))) (+ x y z))
+	28)
 	
 	
 	

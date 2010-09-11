@@ -6,11 +6,10 @@
 ;; for backwards compatibility but by default I want to avoid aliases and ambiguity
 ;; (like cdr/rest car/first empty?/null, etc...). else and empty are special as they are
 ;; more like language constructs than aliases.
-; (def cons? list?)
-; (def car first)
-; (def cdr rest)
-; (def null? empty?)
-; (def = eq?)
+ (def cons? list?)
+ (def car first)
+ (def cdr rest)
+ (def null? empty?)
 
 (def length (lambda (ls)
 		(cond
@@ -28,6 +27,18 @@
 (def fourth
 	(lambda (ls)
 		(first (rest (rest (rest ls))))))
+		
+(def firsts
+	(lambda (ls)
+		(cond
+			((empty? ls) ls)
+			(else (cons (first (first ls)) (firsts (rest ls)))))))
+		
+(def seconds
+	(lambda (ls)
+		(cond
+			((empty? ls) ls)
+			(else (cons (second (first ls)) (seconds (rest ls)))))))
 
 ;; should be a macro not a function.
 ; (def if
@@ -60,7 +71,32 @@
 		(cond
 			((eq? 0 n) (first ls))
 			(else (pickn (- n 1) (rest ls))))))
-			
+	
+;; cons on to the end of a list 		
+(def consend
+	(lambda (item ls)
+		(cond
+			((empty? ls) (cons item ls))
+			(else (cons (first ls) (consend item (rest ls)))))))
+
+;; macros
+(def let 
+	(macro (bindings body)
+			`((lambda ~(firsts bindings) ~body ) ~@(seconds bindings))))
+
+(def letseq
+	(macro (bindings body)
+		(cond
+			((empty? bindings) body)
+			(else (consend `(letseq ~(rest bindings) ~body)
+						`(let (~(first bindings))))))))
+;		
+;			
+;(def letseq
+;	(macro (bindings body)
+;		(dolist x bindings 
+;			())
+
 ;(defmacro deftags (tags body)
 ;	(map (lambda (tag) 
 ;		`(def ~tag 
