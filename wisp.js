@@ -1,9 +1,27 @@
 /**
 Wisp: Web-Lisp, a lisp dialect interpreted in javascript.
 
+Licensed under the MIT license, reference: http://www.opensource.org/licenses/mit-license.php
+
 Copyright (c) 2010 Paul Lambert
 
-Licensed under the MIT license, included by reference: http://www.opensource.org/licenses/mit-license.php
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 **/
 
@@ -19,14 +37,14 @@ wisp.isEmpty = function(list) {
 wisp.isNumber = function(val) {
     return ((typeof val) === "number");
 };
-wisp.isSymbol = function(val) {
+wisp.isString = function(val) {
     return ((typeof val) === "string");
 };
 wisp.isBoolean = function(val) {
     return ((typeof val) === "boolean");
 };
 wisp.isAtom = function(val) {
-    return wisp.isNumber(val) || wisp.isBoolean(val) || wisp.isSymbol(val);
+    return wisp.isNumber(val) || wisp.isBoolean(val) || wisp.isString(val);
 };
 wisp.isNonEmptyCons = function(val) {
     return (val instanceof Array) && (val.length === 2);
@@ -87,6 +105,7 @@ Array.prototype._toWispString = function(start) {
     if (start) str = str + ")";
     return str;
 };
+// override default toString
 Array.prototype.toString = Array.prototype.toWispString;
 /****** End Core Wisp ******/
 
@@ -98,14 +117,15 @@ wisp.EOF = {
     type: "EOF"
 };
 wisp.EOL = {
-    type: "EOL" // end of line
+    type: "EOL" // end of list, not line
 };
 wisp.COMMENT = {
     type: "Comment"
 };
 
-// converts array (such as that produced by _readIntoArray) into wisp sexp
-// inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
+/** Converts array (such as that produced by _readIntoArray) into wisp sexp
+	inspired by similar function in http://onestepback.org/index.cgi/Tech/Ruby/LispInRuby.red
+*/
 Array.prototype.toWispSexp = function() {
     var i, item, reversed, result = wisp.empty;
     reversed = this.reverse();
@@ -117,19 +137,32 @@ Array.prototype.toWispSexp = function() {
     return result;
 };
 
+/**	Consumes program text as a string and and option advance object indicating where in the string
+	to begin reading.
+	Produces wisp list of string tokens with the list structure mirroring that given in the program text.
+*/
 wisp.read = function(wispScript, advance) {
     if (advance === undefined) {
         advance = {
-            'index': 0
+            'index': 0,
+			'lineNumber': 1
         };
     }
-    var arrd = wisp._readIntoArray(wispScript, advance);
-    return (arrd instanceof Array) ? arrd.toWispSexp() : arrd;
+    var asArrays = wisp._readIntoArray(wispScript, advance);
+    return (asArrays instanceof Array) ? asArrays.toWispSexp() : asArrays;
 };
+
+/**	Helper function for wisp.read. Produces a intermediary where the string tokens are stored in
+	an array, not a list. For example the text "(this is not (a (list)))" would produce the
+	equivalent to the javascript literal ["this", "is", "not", ["a", ["list"]]]
+
+	Also expands some 'syntaxtic sugar', for example "~name" becomes ["unquote", "name"]
+*/
 wisp._readIntoArray = function(wispScript, advance) {
     if (wispScript.length === 0 || wispScript.length <= advance['index']) return wisp.EOF;
     var upToHere = wispScript.substring(advance['index']);
     var nextChar = upToHere.trim()[0];
+	var nextCharIndex = upToHere.indexOf(nextChar);
     var token, pos;
     switch (nextChar) {
     case ")":
@@ -142,7 +175,7 @@ wisp._readIntoArray = function(wispScript, advance) {
             val = wisp._readIntoArray(wispScript, advance);
             if (val === wisp.COMMENT) continue;
             if (val === wisp.EOL) break;
-            if (val === wisp.EOF) throw "Error: end of file reached without reaching list end";
+            if (val === wisp.EOF) throw "Error: end of file reached without reaching end of list";
             sexp.push(val);
         }
         return sexp;
@@ -194,7 +227,7 @@ wisp._readIntoArray = function(wispScript, advance) {
 /****** End Reader ******/
 
 /****** Interpreter
-Consumes list structures produced by the reader and produces values: basic types, or functions
+Consumes list structures produced by the reader and produces values
 ******/
 
 /** Parsing Helpers **/
@@ -221,6 +254,22 @@ wisp.interpCond = function(args, env) {
     if (cond) return wisp.interp(wisp.second(wisp.first(args)), env);
     else return wisp.interpCond(wisp.rest(args), env);
 };
+wisp.interpSeq = function(exprList, env) {
+	if (wisp.isEmpty(wisp.rest(exprList))) return wisp.interp(wisp.first(exprList), env);
+	else {
+		wisp.interp(wisp.first(exprList), env); // ignore return value
+		return wisp.interpSeq(wisp.rest(exprList), env);
+	}
+};
+wisp.interpWhile = function(condExpr, bodyExpr, env){
+	var lastVal, condition = wisp.interp(condExpr, env);
+	lastVal = condition;
+	while (condition === true){
+		lastVal = wisp.interp(bodyExpr, env);
+		condition = wisp.interp(condExpr, env);
+	}
+	return lastVal;
+};
 wisp.interpQuote = function(sexp, env, isBackquote) {
     if ((typeof sexp) === "string") {
         if (wisp.parseIsNumber(sexp)) {
@@ -232,7 +281,7 @@ wisp.interpQuote = function(sexp, env, isBackquote) {
         else if (wisp.parseIsString(sexp)) {
             return sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"");
         }
-        else if (wisp.isSymbol(sexp)) {
+        else if (wisp.isString(sexp)) {
             return sexp;
         }
     }
@@ -240,7 +289,12 @@ wisp.interpQuote = function(sexp, env, isBackquote) {
         if (wisp.isEmpty(sexp)) return sexp;
         if (isBackquote) {
             var e1 = wisp.first(sexp);
-            if (e1 === "unquote") return wisp.interp(wisp.second(sexp), env);
+            if (e1 === "unquote") {
+				console.log("in unquote, second is: " + wisp.second(sexp));
+				var val = wisp.interp(wisp.second(sexp), env);
+				console.log("val returned: " + val);
+				return val;
+			}
             if (wisp.isCons(e1) && wisp.first(e1) === "unquote-splice") {
                 var restList = wisp.interpQuote(wisp.rest(sexp), env, isBackquote);
                 var spliceIn = wisp.interp(wisp.second(e1), env);
@@ -258,18 +312,18 @@ wisp.envSet = function(param, val, env) {
     var ns = env[env['__currentNamespace']];
     ns[param] = val;
 };
-wisp.envLookup = function(symbol, env) {
+wisp.envLookup = function(identifier, env) {
     var val;
     // look in current namespaces
     var i, cn = env['__currentNamespace'];
     for (i = 0; i < (cn.length && val === undefined); i++) {
-        val = env[cn][symbol];
+        val = env[cn][identifier];
     }
     // then look in global namespaces
-    if (val === undefined) val = env[symbol];
+    if (val === undefined) val = env[identifier];
 
     if (val === undefined) {
-        throw "given symbol name '" + symbol + "' not in environment";
+        throw "Unbound identifier: " + identifier + " isn't defined in the current scope.";
     }
     else {
         return val;
@@ -287,17 +341,20 @@ wisp.copyEnv = function(oldEnv) {
 };
 wisp.addArgsToEnv = function(params, args, startingEnv) {
     if (wisp.isEmpty(params)) {
-        wisp.envSet('_argslist', args, startingEnv);
         return startingEnv;
     }
+	var id = wisp.first(params);
+	if (id[0] === "&"){
+        wisp.envSet(id.substring(1), args, startingEnv);
+        return startingEnv;
+	}
     else if (wisp.isEmpty(args)) {
         throw "Wisp error: insufficient number of arguments given";
     }
     else {
-        var env, sym = wisp.first(params),
-        val = wisp.first(args);
+		var env, val = wisp.first(args);
         env = wisp.addArgsToEnv(wisp.rest(params), wisp.rest(args), startingEnv);
-        wisp.envSet(sym, val, env);
+        wisp.envSet(id, val, env);
         return env;
     }
 };
@@ -317,7 +374,7 @@ wisp.interp = function(sexp, env) {
     if (wisp.parseIsNumber(sexp)) return parseFloat(sexp);
     else if (wisp.parseIsBoolean(sexp)) return sexp === "true";
     else if (wisp.parseIsString(sexp)) return sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"");
-    else if (wisp.isSymbol(sexp)) return wisp.envLookup(sexp, env);
+    else if (wisp.isString(sexp)) return wisp.envLookup(sexp, env);
     else if (wisp.isCons(sexp)) {
         switch (wisp.first(sexp)) {
         case "quote":
@@ -356,7 +413,11 @@ wisp.interp = function(sexp, env) {
                 // give self reference to allow for recursion
                 wisp.envSet(wisp.second(sexp), val, val.savedEnv);
             }
-            return wisp.second(sexp);
+            return val;
+		case "seq": 
+			return wisp.interpSeq(wisp.rest(sexp), env);
+		case "while":
+			return wisp.interpWhile(wisp.second(sexp), wisp.third(sexp), env);
         default:
             // function & macro application
             closure = wisp.interp(wisp.first(sexp), env);
@@ -411,11 +472,38 @@ wisp.basicEnv = {
         if (wisp.isEmpty(args)) return 1;
         return wisp.first(args) / arguments.callee(wisp.rest(args));
     },
-
     "%": function(args) {
         // only defined for two operators
         return wisp.first(args) % wisp.second(args);
     },
+    ">": function(args) {
+        // only defined for two operators
+        return wisp.first(args) > wisp.second(args);
+    },
+    ">=": function(args) {
+        // only defined for two operators
+        return wisp.first(args) >= wisp.second(args);
+    },
+    "<": function(args) {
+        // only defined for two operators
+        return wisp.first(args) < wisp.second(args);
+    },
+    "<=": function(args) {
+        // only defined for two operators
+        return wisp.first(args) <= wisp.second(args);
+    },
+	// boolean logic
+	"not": function(args) {
+		return !wisp.first(args);
+	},
+	"and": function(args) {
+		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+		else return wisp.first(args) && arguments.callee(wisp.rest(args));
+	},
+	"or": function(args) {
+		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+		else return wisp.first(args) || arguments.callee(wisp.rest(args));
+	},
     // list manipulation
     "list": function(args) {
         return args;
@@ -474,7 +562,7 @@ wisp.basicEnv = {
         return wisp.isBoolean(wisp.first(args));
     },
     "string?": function(args) {
-        return wisp.isSymbol(wisp.first(args));
+        return wisp.isString(wisp.first(args));
     },
     // pass through functions
     "log": function(args) {
@@ -523,7 +611,7 @@ wisp.basicEnv = {
             }
         }
         if (!found) {
-            if (!wisp.isSymbol(name)) throw "namespace must be a string";
+            if (!wisp.isString(name)) throw "namespace must be a string";
             env[name] = {};
             spaces.push(name);
         }
@@ -560,7 +648,8 @@ wisp.readNextScript = function() {
     function(wispScript) {
         wispScript = wispScript.trim();
         advance = {
-            'index': 0
+            'index': 0,
+			'lineNumber': 1
         };
         sexps = [];
         while (advance['index'] < wispScript.length) {

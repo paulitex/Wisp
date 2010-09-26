@@ -1,21 +1,38 @@
-- gensyms in macros (hygenic macros)
+IDEA: Wrap internal types in objects with type information (so we can distinguish
+be identifiers and strings), source line information, and other useful stuff. 
+Should save the symbol vs. string problem, make errors more informative,
+and generally improve things.
+
 - namespaces (review concept, use and test)
+- remove jquery dependencies
+- get a better REPL (maybe email the clojure, scala, whoever guys and ask if I can borrow some of the code)
+- Write Tutorial
 - 'native' (aka javascript) function interface
 	=> Idea: have user add to wisp.userFunctions and object similar to basic env in syntax & interface.
 			All functions added get mixed in under keyed namespace
-- sequences (do expr1 expr2 ... exprn) => evaluates each expression and returns expression n
-	=> this might be progn, seq, or do... look at CL/clojure and pick best name
-- boolean basic operators
-- compare to clojure basic read types
 - Better error messages
-- mutation / while loop
-- lazy evaluation (want infinite lists, etc..)
+- add toWispString() to objects (for closure printing, etc..), general pretty printing for all values
+- Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory.
+- Exception Handling
+- Improve test coverage
+- better documentation all around
+- figure out a better difference/representation of strings and symbols. May be related:
+- move some special forms out of core interpreter and into basic functions
+
+BUGS
+
+This shouldn't happen: 
+wisp>`(def paul "isok")
+=> (def paul isok)
+it means that (eval `(def paul "isok")) fails because eval thinks isok is a symbol, not a string.
+
+
+CAN BE DONE AFTER RELEASE:
+- docstrings / doc system
+- warnings on redefining? Maybe a "redef" language construct 
+- static type checker? Or at least a jslint style checker?
+- gensyms in macros (hygenic macros)
+- lazy evaluation (want infinite lists, etc..)?
 - continuations (want a call/cc structure)
 - objects/type system/define-type?
-- add toWispString() to objects (for closure printing, etc..), general pretty printing for all values
-- Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory. Maybe JS takes care of this?
-- Exception Handling
-- Access to Dom? Perhaps can drop down to jquery, or at least use jquery selectors natively e.g. (append ("#mydiv") "wicked"). Or something.
-- Improve test coverage
-- docstrings in wisp
-- better documentation all around
+- performance optimization

@@ -1,0 +1,7 @@
+- first-class macros (macros can be stored in datastructures, passed as values, returned by functions/macros)
+- first-class functions 
+- miniminalist core functions and syntax, emphasis on small, orthogonal feature set. Lisp syntax primarily
+inspired by Scheme with some clojure/CL mixed in. 
+- variable arguments with &rest syntax. e.g. ((lambda (one two &three) (...body...)) 1 2 3 4 5 6)
+in body, bindings will be: one => 1, two => 2, three => (3 4 5 6)
+- Basic data types: Strings, Numbers, Booleans, Lists. 

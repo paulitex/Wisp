@@ -90,31 +90,27 @@
 			((empty? bindings) body)
 			(else (consend `(letseq ~(rest bindings) ~body)
 						`(let (~(first bindings))))))))
-;		
-;			
-;(def letseq
-;	(macro (bindings body)
-;		(dolist x bindings 
-;			())
+						
+(def defun 
+	(macro (name params body)
+		`(def ~name 
+			(lambda ~params ~body))))
+			
+(def defmacro 
+	(macro (name params body)
+		`(def ~name 
+			(macro ~params ~body))))
 
-;(defmacro deftags (tags body)
-;	(map (lambda (tag) 
-;		`(def ~tag 
-;			(lambda (body)
-;				(+ "<" tag ">" body "</" tag ">")))) tags))
-
+(defmacro <- (name body) 
+	`(def ~name ~body))
+	
+(defmacro if (decision yesExpr elseExpr)
+	`(cond 
+		(~decision ~yesExpr)
+		(else ~elseExpr)))
 
 ;; Html	
-;(let ((tags (split " " "h1 h2 h3 h4 h5 h6 p span div li ol ul title")))
-;	(each tags 
-;		(lambda (tag)
-;			(def tag 
-;				(lambda (body)
-;					(+ "<" tag ">" body "</" tag ">"))))))
-
-
-;; crappy none macro work. need to fix this, just a couple for now
-
+;(let ((tags (split " " "h1 h2 h3 h4 h5 h6 p span div li ol ul title"))
 
 (def htmlAttributeString 
 	(lambda (ls)
@@ -122,6 +118,17 @@
 			((empty? ls) "")
 			(else (+ (first (first ls)) "=\"" (second (first ls)) "\" " (htmlAttributeString (rest ls)))))))
 
+
+(defmacro defPairedHtml (tagNames)
+	(if (empty? tagNames)
+		`empty
+		`(seq
+			(def ~(first tagNames)
+				(lambda (attrList body) 
+					(let ((tag ~(+ "\"" (first tagNames) "\"")))
+						(+ "<" tag " " (htmlAttributeString attrList) ">" body "</" tag ">"))
+						))
+				(defPairedHtml ~(rest tagNames)))))
 			
 ;; FIX THIS
 (def h1 
@@ -141,8 +148,8 @@
 		(+ "<p>" body "</p>")))
 
 (def span 
-	(lambda ()
-		(let ((body (first _argslist)) (attributes (rest _argslist)))
+	(lambda (&args)
+		(let ((body (first args)) (attributes (rest args)))
 			(+ "<span"
 				(cond 
 					((empty? attributes) ">")
@@ -151,8 +158,8 @@
 
 		
 (def div 
-	(lambda ()
-		(let ((body (first _argslist)) (attributes (rest _argslist)))
+	(lambda (&args)
+		(let ((body (first args)) (attributes (rest args)))
 			(+ "<div"
 				(cond 
 					((empty? attributes) ">")
