@@ -166,10 +166,12 @@ wisp._readIntoArray = function(wispScript, advance) {
     var token, pos;
     switch (nextChar) {
     case ")":
-        advance['index'] += upToHere.indexOf(")") + 1;
+		// End of list, advance index past the character and return end of list constant
+        advance['index'] += nextCharIndex + 1;
         return wisp.EOL;
     case "(":
-        advance['index'] += upToHere.indexOf("(") + 1;
+		// Start of list, recursively read in each element until we reach the end of the list
+        advance['index'] += nextCharIndex + 1;
         var val, sexp = [];
         while (true) {
             val = wisp._readIntoArray(wispScript, advance);
@@ -181,29 +183,28 @@ wisp._readIntoArray = function(wispScript, advance) {
         return sexp;
     case "\"":
         //string
-        var begin = upToHere.indexOf(nextChar);
-        pos = upToHere.substring(begin).search(/[^\\]"/) + begin + 2; //twice for two char regex
+        pos = upToHere.substring(nextCharIndex).search(/[^\\]"/) + nextCharIndex + 2; //twice for two char regex
         token = upToHere.substring(0, pos).trim();
         advance['index'] += pos;
         return token;
     case "'":
         //quote
-        advance['index'] += upToHere.indexOf("'") + 1;
+        advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
         return ["quote", token];
     case "`":
         //backquote
-        advance['index'] += upToHere.indexOf("`") + 1;
+        advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
         return ["backquote", token];
     case "~":
         //unquote and unquote-splice
-        if (upToHere[upToHere.indexOf("~") + 1] == "@") {
-            advance['index'] += upToHere.indexOf("@") + 1;
+        if (upToHere[nextCharIndex + 1] == "@") {
+            advance['index'] += nextCharIndex + 2;
             token = wisp._readIntoArray(wispScript, advance);
             return ["unquote-splice", token];
         }
-        advance['index'] += upToHere.indexOf("~") + 1;
+        advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
         return ["unquote", token];
     case ";":
@@ -212,13 +213,16 @@ wisp._readIntoArray = function(wispScript, advance) {
         advance['index'] += pos;
         return wisp.COMMENT;
     default:
+		// Default action is to read a single string token. Knowing that we are not at the 
+		// start of a list, a token is simply the substring starting from where we currently are (upToHere)
+		// and ending at the soonest of whitespace or a closing paranthesis.
         var closeParen, whiteSpace, endOfToken;
         closeParen = upToHere.indexOf(")");
         if (closeParen === -1) closeParen = Infinity;
         whiteSpace = upToHere.search(/\S\s/) + 1;
-        if (whiteSpace < 1) whiteSpace = (wispScript.length - advance['index']);
+        if (whiteSpace === 0) whiteSpace = (wispScript.length - advance['index']); // relative index of end of file
         endOfToken = (closeParen < whiteSpace) ? closeParen: whiteSpace;
-        token = wispScript.substring(advance['index'], advance['index'] + endOfToken).trim();
+		token = upToHere.substring(0, endOfToken).trim();
         advance['index'] += endOfToken;
         return token;
     }
