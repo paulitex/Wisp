@@ -43,6 +43,48 @@ wisp.isString = function(val) {
 wisp.isBoolean = function(val) {
     return ((typeof val) === "boolean");
 };
+wisp.isAbstractNumber = function(val) {
+    return (typeof val === "object") && val.type && val.type === "number";
+};
+wisp.isAbstractString = function(val) {
+    return (typeof val === "object") && val.type && val.type === "string";
+};
+wisp.isAbstractBoolean = function(val) {
+    return (typeof val === "object") && val.type && val.type === "bool";
+};
+wisp.isAbstractIdentifier = function(val) {
+    return (typeof val === "object") && val.type && val.type === "id";
+};
+wisp.isAbstractLambdaClosure = function(val) {
+    return (typeof val === "object") && val.type && val.type === "lambdaClosure";
+};
+wisp.isAbstractMacroClosure = function(val) {
+    return (typeof val === "object") && val.type && val.type === "macroClosure";
+};
+wisp.verifyNumber = function(val) {
+    if (!wisp.isAbstractNumber(val)) throw "Type Error: " + val.toString() + " is not a number";
+    return val;
+};
+wisp.verifyString = function(val) {
+    if (!wisp.isAbstractString(val)) throw "Type Error: " + val.toString() + " is not a string";
+    return val;
+};
+wisp.verifyBoolean = function(val) {
+    if (!wisp.isAbstractBoolean(val)) throw "Type Error: " + val.toString() + " is not a boolean";
+    return val;
+};
+wisp.verifyIdentifier = function(val) {
+    if (!wisp.isAbstractIdentifier(val)) throw "Type Error: " + val.toString() + " is not an identifier";
+    return val;
+};
+wisp.verifyLambdaClosure = function(val) {
+    if (!wisp.isAbstractLambdaClosure(val)) throw "Type Error: " + val.toString() + " is not a function";
+    return val;
+};
+wisp.verifyMacroClosure = function(val) {
+    if (!wisp.isAbstractMacroClosure(val)) throw "Type Error: " + val.toString() + " is not a macro";
+    return val;
+};
 wisp.isAtom = function(val) {
     return wisp.isNumber(val) || wisp.isBoolean(val) || wisp.isString(val);
 };
@@ -64,8 +106,8 @@ wisp.first = function(list) {
 };
 wisp.rest = function(list) {
     if (!wisp.isNonEmptyCons(list)) {
-		throw "Wisp error: rest is only defined for non-empty lists";
-	}
+        throw "Wisp error: rest is only defined for non-empty lists";
+    }
     return list[1];
 };
 wisp.second = function(list) {
@@ -97,8 +139,8 @@ Array.prototype._toWispString = function(start) {
     if (wisp.isEmpty(this)) return "";
     var restStr, str = "",
     first = wisp.first(this);
-    if (start) str = "(";
-    str += wisp.isCons(first) ? first._toWispString(true) : first;
+    if (start) str = "(list ";
+    str += wisp.isCons(first) ? first._toWispString(true) : first.toString();
     restStr = wisp.rest(this)._toWispString(false);
     str += (restStr === "") ? "": " ";
     str += restStr;
@@ -145,7 +187,7 @@ wisp.read = function(wispScript, advance) {
     if (advance === undefined) {
         advance = {
             'index': 0,
-			'lineNumber': 1
+            'lineNumber': 1
         };
     }
     var asArrays = wisp._readIntoArray(wispScript, advance);
@@ -162,15 +204,15 @@ wisp._readIntoArray = function(wispScript, advance) {
     if (wispScript.length === 0 || wispScript.length <= advance['index']) return wisp.EOF;
     var upToHere = wispScript.substring(advance['index']);
     var nextChar = upToHere.trim()[0];
-	var nextCharIndex = upToHere.indexOf(nextChar);
+    var nextCharIndex = upToHere.indexOf(nextChar);
     var token, pos;
     switch (nextChar) {
     case ")":
-		// End of list, advance index past the character and return end of list constant
+        // End of list, advance index past the character and return end of list constant
         advance['index'] += nextCharIndex + 1;
         return wisp.EOL;
     case "(":
-		// Start of list, recursively read in each element until we reach the end of the list
+        // Start of list, recursively read in each element until we reach the end of the list
         advance['index'] += nextCharIndex + 1;
         var val, sexp = [];
         while (true) {
@@ -182,58 +224,84 @@ wisp._readIntoArray = function(wispScript, advance) {
         }
         return sexp;
     case "\"":
-        //string
+        //string case needed to simply default token extraction (whitespace is ignored, we only look for closing ")
         pos = upToHere.substring(nextCharIndex).search(/[^\\]"/) + nextCharIndex + 2; //twice for two char regex
         token = upToHere.substring(0, pos).trim();
         advance['index'] += pos;
-        return token;
+        return wisp.tokenToAbstractSyntax(token);
     case "'":
         //quote
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return ["quote", token];
+        return [wisp.tokenToAbstractSyntax("quote"), token];
     case "`":
         //backquote
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return ["backquote", token];
+        return [wisp.tokenToAbstractSyntax("backquote"), token];
     case "~":
         //unquote and unquote-splice
         if (upToHere[nextCharIndex + 1] == "@") {
             advance['index'] += nextCharIndex + 2;
             token = wisp._readIntoArray(wispScript, advance);
-            return ["unquote-splice", token];
+            return [wisp.tokenToAbstractSyntax("unquote-splice"), token];
         }
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return ["unquote", token];
+        return [wisp.tokenToAbstractSyntax("unquote"), token];
     case ";":
         //single until-end-of-line comment
         pos = (upToHere.search(/\n/) + 1) || wispScript.length;
         advance['index'] += pos;
         return wisp.COMMENT;
     default:
-		// Default action is to read a single string token. Knowing that we are not at the 
-		// start of a list, a token is simply the substring starting from where we currently are (upToHere)
-		// and ending at the soonest of whitespace or a closing paranthesis.
+        // Default action is to read a single string token. Knowing that we are not at the 
+        // start of a list, a token is simply the substring starting from where we currently are (upToHere)
+        // and ending at the soonest of whitespace or a closing paranthesis.
         var closeParen, whiteSpace, endOfToken;
         closeParen = upToHere.indexOf(")");
         if (closeParen === -1) closeParen = Infinity;
         whiteSpace = upToHere.search(/\S\s/) + 1;
         if (whiteSpace === 0) whiteSpace = (wispScript.length - advance['index']); // relative index of end of file
         endOfToken = (closeParen < whiteSpace) ? closeParen: whiteSpace;
-		token = upToHere.substring(0, endOfToken).trim();
+        token = upToHere.substring(0, endOfToken).trim();
         advance['index'] += endOfToken;
-        return token;
+        return wisp.tokenToAbstractSyntax(token);
     }
 };
-
-/****** End Reader ******/
-
-/****** Interpreter
-Consumes list structures produced by the reader and produces values
-******/
-
+wisp.tokenToAbstractSyntax = function(tokenString) {
+    var tokenObject = {};
+    if (wisp.parseIsNumber(tokenString)) {
+        tokenObject.type = "number";
+        tokenObject.value = parseFloat(tokenString);
+        tokenObject.toString = function() {
+            return this.value + "";
+        };
+    }
+    else if (wisp.parseIsBoolean(tokenString)) {
+        tokenObject.type = "bool";
+        tokenObject.value = tokenString === "true";
+        tokenObject.toString = function() {
+            return this.value + "";
+        };
+    }
+    else if (wisp.parseIsString(tokenString)) {
+        tokenObject.type = "string";
+        tokenObject.value = tokenString.substring(1, tokenString.length - 1).replace(/\\"/g, "\""); //strip quotes and escapes
+        tokenObject.toString = function() {
+            return '"' + this.value + '"';
+        };
+    }
+    else {
+        // identifier
+        tokenObject.type = "id";
+        tokenObject.value = tokenString;
+        tokenObject.toString = function() {
+            return "'" + this.value;
+        };
+    }
+    return tokenObject;
+};
 /** Parsing Helpers **/
 wisp.parseIsNumber = function(sexp) {
     return ! isNaN(parseFloat(sexp));
@@ -244,7 +312,11 @@ wisp.parseIsBoolean = function(sexp) {
 wisp.parseIsString = function(sexp) {
     return ((typeof sexp) === "string") && sexp[0] === "\"" && sexp[sexp.length - 1] === "\"";
 };
-/** End Parsing Helpers **/
+/****** End Reader ******/
+
+/****** Interpreter
+Consumes list structures produced by the reader and produces values
+******/
 
 /** Interp Logic Helpers **/
 wisp.interpArgs = function(args, env) {
@@ -254,80 +326,61 @@ wisp.interpArgs = function(args, env) {
 wisp.interpCond = function(args, env) {
     if (wisp.isEmpty(args)) return args;
     var cond = wisp.interp(wisp.first(wisp.first(args)), env);
-    if (!wisp.isBoolean(cond)) throw "Error in evaluating condition: " + cond + " is not a boolean";
-    if (cond) return wisp.interp(wisp.second(wisp.first(args)), env);
+    wisp.verifyBoolean(cond);
+    if (cond.value) return wisp.interp(wisp.second(wisp.first(args)), env);
     else return wisp.interpCond(wisp.rest(args), env);
 };
 wisp.interpSeq = function(exprList, env) {
-	if (wisp.isEmpty(wisp.rest(exprList))) return wisp.interp(wisp.first(exprList), env);
-	else {
-		wisp.interp(wisp.first(exprList), env); // ignore return value
-		return wisp.interpSeq(wisp.rest(exprList), env);
-	}
+    if (wisp.isEmpty(wisp.rest(exprList))) return wisp.interp(wisp.first(exprList), env);
+    else {
+        wisp.interp(wisp.first(exprList), env); // ignore return value
+        return wisp.interpSeq(wisp.rest(exprList), env);
+    }
 };
-wisp.interpWhile = function(condExpr, bodyExpr, env){
-	var lastVal, condition = wisp.interp(condExpr, env);
-	lastVal = condition;
-	while (condition === true){
-		lastVal = wisp.interp(bodyExpr, env);
-		condition = wisp.interp(condExpr, env);
-	}
-	return lastVal;
+wisp.interpWhile = function(condExpr, bodyExpr, env) {
+    var lastVal, condition = wisp.verifyBoolean(wisp.interp(condExpr, env));
+    lastVal = condition;
+    while (condition.value === true) {
+        lastVal = wisp.interp(bodyExpr, env);
+        condition = wisp.interp(condExpr, env);
+    }
+    return lastVal;
 };
 wisp.interpQuote = function(sexp, env, isBackquote) {
-    if ((typeof sexp) === "string") {
-        if (wisp.parseIsNumber(sexp)) {
-            return parseFloat(sexp);
+    if (!wisp.isCons(sexp) || wisp.isEmpty(sexp)) return sexp;
+    if (isBackquote) {
+        var e1 = wisp.first(sexp);
+        if (wisp.isAbstractIdentifier(e1) && e1.value === "unquote") {
+            return wisp.interp(wisp.second(sexp), env);
         }
-        else if (wisp.parseIsBoolean(sexp)) {
-            return sexp === "true";
-        }
-        else if (wisp.parseIsString(sexp)) {
-            return sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"");
-        }
-        else if (wisp.isString(sexp)) {
-            return sexp;
+        if (wisp.isCons(e1) && wisp.isAbstractIdentifier(wisp.first(e1)) && wisp.first(e1).value === "unquote-splice") {
+            var restList = wisp.interpQuote(wisp.rest(sexp), env, isBackquote);
+            var spliceIn = wisp.interp(wisp.second(e1), env);
+            return wisp.append(spliceIn, restList);
         }
     }
-    else if (wisp.isCons(sexp)) {
-        if (wisp.isEmpty(sexp)) return sexp;
-        if (isBackquote) {
-            var e1 = wisp.first(sexp);
-            if (e1 === "unquote") {
-				console.log("in unquote, second is: " + wisp.second(sexp));
-				var val = wisp.interp(wisp.second(sexp), env);
-				console.log("val returned: " + val);
-				return val;
-			}
-            if (wisp.isCons(e1) && wisp.first(e1) === "unquote-splice") {
-                var restList = wisp.interpQuote(wisp.rest(sexp), env, isBackquote);
-                var spliceIn = wisp.interp(wisp.second(e1), env);
-                return wisp.append(spliceIn, restList);
-            }
-        }
-        return wisp.cons(wisp.interpQuote(wisp.first(sexp), env, isBackquote), wisp.interpQuote(wisp.rest(sexp), env, isBackquote));
-    }
-    else {
-        throw "Parse Error: Given s-expression neither basic data type or cons";
-    }
+    return wisp.cons(wisp.interpQuote(wisp.first(sexp), env, isBackquote), wisp.interpQuote(wisp.rest(sexp), env, isBackquote));
 };
 
-wisp.envSet = function(param, val, env) {
+wisp.envSet = function(id, val, env) {
     var ns = env[env['__currentNamespace']];
-    ns[param] = val;
+    var name = wisp.verifyIdentifier(id).value;
+    ns[name] = val;
+    return env;
 };
-wisp.envLookup = function(identifier, env) {
+wisp.envLookup = function(id, env) {
     var val;
+    var name = wisp.verifyIdentifier(id).value;
     // look in current namespaces
     var i, cn = env['__currentNamespace'];
     for (i = 0; i < (cn.length && val === undefined); i++) {
-        val = env[cn][identifier];
+        val = env[cn][name];
     }
     // then look in global namespaces
-    if (val === undefined) val = env[identifier];
+    if (val === undefined) val = env[name];
 
     if (val === undefined) {
-        throw "Unbound identifier: " + identifier + " isn't defined in the current scope.";
+        throw "Unbound identifier: " + name + " isn't defined in the current scope.";
     }
     else {
         return val;
@@ -347,99 +400,161 @@ wisp.addArgsToEnv = function(params, args, startingEnv) {
     if (wisp.isEmpty(params)) {
         return startingEnv;
     }
-	var id = wisp.first(params);
-	if (id[0] === "&"){
-        wisp.envSet(id.substring(1), args, startingEnv);
+    var nextParam = wisp.verifyIdentifier(wisp.first(params));
+    if (nextParam.value[0] === "&") {
+        var argsList = {};
+        argsList.type = "id";
+        argsList.value = nextParam.value.substring(1);
+        argsList.toString = function() {
+            return "'" + this.value;
+        };
+        wisp.envSet(argsList, args, startingEnv);
         return startingEnv;
-	}
+    }
     else if (wisp.isEmpty(args)) {
         throw "Wisp error: insufficient number of arguments given";
     }
     else {
-		var env, val = wisp.first(args);
+        var env, val = wisp.first(args);
         env = wisp.addArgsToEnv(wisp.rest(params), wisp.rest(args), startingEnv);
-        wisp.envSet(id, val, env);
+        wisp.envSet(nextParam, val, env);
         return env;
     }
 };
 wisp.macroExpand = function(macroExpr, args, env) {
-    var macro = wisp.interp(macroExpr, env);
-    if (typeof macro === "object" && macro.type && macro.type === "macroClosure") {
-        return wisp.interp(macro.body, wisp.addArgsToEnv(macro.params, args, macro.savedEnv));
-    }
-    throw "given expression " + macroExpr + " is not a macro and thus cannot be expanded";
+    var macro = wisp.verifyMacroClosure(wisp.interp(macroExpr, env));
+    return wisp.interp(macro.body, wisp.addArgsToEnv(macro.params, args, macro.savedEnv));
 };
-
+wisp.unboxAbstractSyntax = function(args) {
+    if (wisp.isEmpty(args)) return args;
+    var first = wisp.first(args);
+    if (wisp.isAbstractNumber(first) || wisp.isAbstractString(first) || wisp.isAbstractBoolean(first)) {
+        return wisp.cons(first.value, wisp.unboxAbstractSyntax(wisp.rest(args)));
+    }
+    else if (wisp.isAbstractIdentifier(first)) {
+        // javascript has no native symbol/identifier type, so we pass in abstract syntax object itself
+        return wisp.cons(first, wisp.unboxAbstractSyntax(wisp.rest(args)));
+    }
+    else if (wisp.isCons(first)) {
+        return wisp.cons(wisp.unboxAbstractSyntax(first), wisp.unboxAbstractSyntax(wisp.rest(args)));
+    }
+    else throw "Unrecognized value " + first + " tried to be passed to native javascript function";
+};
+wisp.boxJavascriptValue = function(value) {
+    var boxed = {};
+    if (wisp.isBoolean(value)) {
+        boxed.type = "bool";
+        boxed.value = (value === true);
+        boxed.toString = function() {
+            return this.value + "";
+        };
+    }
+    else if (wisp.isNumber(value)) {
+        boxed.type = "number";
+        boxed.value = value;
+        boxed.toString = function() {
+            return this.value + "";
+        };
+    }
+    else if (wisp.isString(value)) {
+        boxed.type = "string";
+        boxed.value = value;
+        boxed.toString = function() {
+            return '"' + this.value + '"';
+        };
+    }
+    else if (wisp.isAbstractIdentifier(value)) {
+        return value;
+    }
+    else if (wisp.isCons(value)) {
+        if (wisp.isEmpty(value)) return value;
+        else return wisp.cons(wisp.boxJavascriptValue(wisp.first(value)), wisp.boxJavascriptValue(wisp.rest(value)));
+    }
+    else {
+        boxed.type = "string";
+        boxed.value = value + "";
+        boxed.toString = function() {
+            return '"' + this.value + '"';
+        };
+    }
+    return boxed;
+};
 /** End Interp Logic Helpers **/
 
 /* Main Interpreter: read-produced lists => wisp values */
 wisp.interp = function(sexp, env) {
-    var closure, args, paramsList, val, newEnv;
-    if (wisp.parseIsNumber(sexp)) return parseFloat(sexp);
-    else if (wisp.parseIsBoolean(sexp)) return sexp === "true";
-    else if (wisp.parseIsString(sexp)) return sexp.substring(1, sexp.length - 1).replace(/\\"/g, "\"");
-    else if (wisp.isString(sexp)) return wisp.envLookup(sexp, env);
+    var closure, first, args, paramsList, val, newEnv;
+    if (wisp.isAbstractNumber(sexp) || wisp.isAbstractString(sexp) || wisp.isAbstractBoolean(sexp)) return sexp;
+    else if (wisp.isAbstractIdentifier(sexp)) return wisp.envLookup(sexp, env);
     else if (wisp.isCons(sexp)) {
-        switch (wisp.first(sexp)) {
-        case "quote":
-            return wisp.interpQuote(wisp.second(sexp), env, false);
-        case "backquote":
-            return wisp.interpQuote(wisp.second(sexp), env, true);
-        case "unquote":
-            throw "Wisp Error: Unquote must occur within a backquote";
-        case "lambda":
-            newEnv = wisp.copyEnv(env);
-            return {
-                type: "closure",
-                body: wisp.third(sexp),
-                params: wisp.second(sexp),
-                savedEnv: newEnv
-            };
-        case "macro":
-            newEnv = wisp.copyEnv(env);
-            return {
-                type: "macroClosure",
-                body: wisp.third(sexp),
-                params: wisp.second(sexp),
-                savedEnv: newEnv
-            };
-        case "macroexpand":
-            return wisp.macroExpand(wisp.first(wisp.first(wisp.rest(sexp))), wisp.rest(wisp.first(wisp.rest(sexp))), env);
-        case "cond":
-            return wisp.interpCond(wisp.rest(sexp), env);
-        case "eval":
-            var evald = wisp.interp(wisp.interp(wisp.first(wisp.rest(sexp)), env), env);
-            return evald;
-        case "def":
-            val = wisp.interp(wisp.third(sexp), env);
-            wisp.envSet(wisp.second(sexp), val, env);
-            if (typeof val === "object" && val.type && (val.type === "closure" || val.type === "macroClosure")) {
-                // give self reference to allow for recursion
-                wisp.envSet(wisp.second(sexp), val, val.savedEnv);
-            }
-            return val;
-		case "seq": 
-			return wisp.interpSeq(wisp.rest(sexp), env);
-		case "while":
-			return wisp.interpWhile(wisp.second(sexp), wisp.third(sexp), env);
-        default:
-            // function & macro application
-            closure = wisp.interp(wisp.first(sexp), env);
-            if (typeof closure === "object" && closure.type) {
-                if (closure.type === "closure") {
-					args = wisp.interpArgs(wisp.rest(sexp), env);
-                    return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+        first = wisp.first(sexp);
+        if (wisp.isAbstractIdentifier(first)) {
+            switch (first.value) {
+            case "quote":
+                return wisp.interpQuote(wisp.second(sexp), env, false);
+            case "backquote":
+                return wisp.interpQuote(wisp.second(sexp), env, true);
+            case "unquote":
+                throw "Wisp Error: Unquote must occur within a backquote";
+            case "lambda":
+                newEnv = wisp.copyEnv(env);
+                return {
+                    type: "lambdaClosure",
+                    body: wisp.third(sexp),
+                    params: wisp.second(sexp),
+                    savedEnv: newEnv,
+                    toString: function() {
+                        return "(list 'lambda " + this.params.toString() + " " + this.body.toString() + ")";
+                    }
+                };
+            case "macro":
+                newEnv = wisp.copyEnv(env);
+                return {
+                    type: "macroClosure",
+                    body: wisp.third(sexp),
+                    params: wisp.second(sexp),
+                    savedEnv: newEnv,
+                    toString: function() {
+                        return "(list 'macro " + this.params.toString() + " " + this.body.toString() + ")";
+                    }
+                };
+            case "macroexpand":
+                return wisp.macroExpand(wisp.first(wisp.first(wisp.rest(sexp))), wisp.rest(wisp.first(wisp.rest(sexp))), env);
+            case "cond":
+                return wisp.interpCond(wisp.rest(sexp), env);
+            case "eval":
+                var evald = wisp.interp(wisp.interp(wisp.first(wisp.rest(sexp)), env), env);
+                return evald;
+            case "def":
+                val = wisp.interp(wisp.third(sexp), env);
+                wisp.envSet(wisp.second(sexp), val, env);
+                if (wisp.isAbstractLambdaClosure(val) || wisp.isAbstractMacroClosure(val)) {
+                    // give self reference to allow for recursion
+                    wisp.envSet(wisp.second(sexp), val, val.savedEnv);
                 }
-                else if (closure.type === "macroClosure") {
-                    return wisp.interp(wisp.macroExpand(wisp.first(sexp), wisp.rest(sexp), env), env);
-                }
+                return val;
+            case "seq":
+                return wisp.interpSeq(wisp.rest(sexp), env);
+            case "while":
+                return wisp.interpWhile(wisp.second(sexp), wisp.third(sexp), env);
             }
-            else if (typeof closure === "function") {
-				args = wisp.interpArgs(wisp.rest(sexp), env);
-                return closure(args, env);
-            }
-            throw "Function expression is invalid: " + closure;
         }
+        // haven't returned yet - default to function & macro application
+        closure = wisp.interp(wisp.first(sexp), env);
+        if (wisp.isAbstractLambdaClosure(closure)) {
+            args = wisp.interpArgs(wisp.rest(sexp), env);
+            return wisp.interp(closure.body, wisp.addArgsToEnv(closure.params, args, closure.savedEnv));
+        }
+        else if (wisp.isAbstractMacroClosure(closure)) {
+            return wisp.interp(wisp.macroExpand(wisp.first(sexp), wisp.rest(sexp), env), env);
+        }
+        else if (typeof closure === "function") {
+            // native js function, unbox args to types it can deal with: numbers, strings and booleans
+            args = wisp.interpArgs(wisp.rest(sexp), env);
+            val = closure(wisp.unboxAbstractSyntax(args), env);
+            return wisp.boxJavascriptValue(val);
+        }
+        throw "Application expression is invalid (neither a function nor macro): " + closure;
     }
     else {
         throw "Wisp Error: Given s-expression " + sexp + " of unknown type";
@@ -496,18 +611,18 @@ wisp.basicEnv = {
         // only defined for two operators
         return wisp.first(args) <= wisp.second(args);
     },
-	// boolean logic
-	"not": function(args) {
-		return !wisp.first(args);
-	},
-	"and": function(args) {
-		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
-		else return wisp.first(args) && arguments.callee(wisp.rest(args));
-	},
-	"or": function(args) {
-		if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
-		else return wisp.first(args) || arguments.callee(wisp.rest(args));
-	},
+    // boolean logic
+    "not": function(args) {
+        return ! wisp.first(args);
+    },
+    "and": function(args) {
+        if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+        else return wisp.first(args) && arguments.callee(wisp.rest(args));
+    },
+    "or": function(args) {
+        if (wisp.isEmpty(wisp.rest(args))) return wisp.first(args);
+        else return wisp.first(args) || arguments.callee(wisp.rest(args));
+    },
     // list manipulation
     "list": function(args) {
         return args;
@@ -536,6 +651,9 @@ wisp.basicEnv = {
         if (wisp.isAtom(first) && wisp.isAtom(second)) {
             return first === second;
         }
+		else if (wisp.isAbstractIdentifier(first) && wisp.isAbstractIdentifier(second)) {
+			return first.value === second.value;
+		}
         else if (wisp.isEmpty(first) && wisp.isEmpty(second)) {
             return true;
         }
@@ -653,7 +771,7 @@ wisp.readNextScript = function() {
         wispScript = wispScript.trim();
         advance = {
             'index': 0,
-			'lineNumber': 1
+            'lineNumber': 1
         };
         sexps = [];
         while (advance['index'] < wispScript.length) {
