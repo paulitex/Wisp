@@ -1,38 +1,25 @@
-IDEA: Wrap internal types in objects with type information (so we can distinguish
-be identifiers and strings), source line information, and other useful stuff. 
-Should save the symbol vs. string problem, make errors more informative,
-and generally improve things.
-
 - namespaces (review concept, use and test)
-- remove jquery dependencies
+- Better testing
+- Error messages in repl
+- remove jquery dependency
 - get a better REPL (maybe email the clojure, scala, whoever guys and ask if I can borrow some of the code)
 - Write Tutorial
 - 'native' (aka javascript) function interface
 	=> Idea: have user add to wisp.userFunctions and object similar to basic env in syntax & interface.
 			All functions added get mixed in under keyed namespace
-- Better error messages
-- add toWispString() to objects (for closure printing, etc..), general pretty printing for all values
 - Garbage collection & memory usage -> reason about this. Gut inclination is currently implementation eats up memory.
 - Exception Handling
+- line numbers in error messages
+- call stack in error messages (how would this be possible?)
 - Improve test coverage
 - better documentation all around
-- figure out a better difference/representation of strings and symbols. May be related:
 - move some special forms out of core interpreter and into basic functions
-
-BUGS
-
-This shouldn't happen: 
-wisp>`(def paul "isok")
-=> (def paul isok)
-it means that (eval `(def paul "isok")) fails because eval thinks isok is a symbol, not a string.
-
 
 CAN BE DONE AFTER RELEASE:
 - docstrings / doc system
 - warnings on redefining? Maybe a "redef" language construct 
 - static type checker? Or at least a jslint style checker?
-- gensyms in macros (hygenic macros)
+- gensyms in macros (hygenic macros) (maybe this should be done before release)
 - lazy evaluation (want infinite lists, etc..)?
-- continuations (want a call/cc structure)
 - objects/type system/define-type?
 - performance optimization

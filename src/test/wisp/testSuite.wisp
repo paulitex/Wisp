@@ -1,7 +1,7 @@
-;; Wisp Test Runner version - 0.1
-;; Copywrite Paul Lambert 2010
+;; Wisp Test Runner version - 0.2
+;; Copyright Paul Lambert 2010
 
-(append-body (h1 "Wisp Test Runner - v 0.1"))
+(append-body (h1 "Wisp Test Runner - v 0.2"))
 
 (def test (lambda (name actual expected)
 	(let ((outline (lambda (result)

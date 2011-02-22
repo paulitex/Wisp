@@ -3,7 +3,7 @@ Wisp: Web-Lisp, a lisp dialect interpreted in javascript.
 
 Licensed under the MIT license, reference: http://www.opensource.org/licenses/mit-license.php
 
-Copyright (c) 2010 Paul Lambert
+Copyright (c) 2010-2011 Paul Lambert
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,9 @@ wisp.isString = function(val) {
 wisp.isBoolean = function(val) {
     return ((typeof val) === "boolean");
 };
+wisp.isAbstractSyntax = function(val) {
+    return (typeof val === "object") && val.type;
+};
 wisp.isAbstractNumber = function(val) {
     return (typeof val === "object") && val.type && val.type === "number";
 };
@@ -62,28 +65,32 @@ wisp.isAbstractMacroClosure = function(val) {
     return (typeof val === "object") && val.type && val.type === "macroClosure";
 };
 wisp.verifyNumber = function(val) {
-    if (!wisp.isAbstractNumber(val)) throw "Type Error: " + val.toString() + " is not a number";
+    if (!wisp.isAbstractNumber(val)) wisp.verifyTypeError(val, "number");
     return val;
 };
 wisp.verifyString = function(val) {
-    if (!wisp.isAbstractString(val)) throw "Type Error: " + val.toString() + " is not a string";
+    if (!wisp.isAbstractString(val)) wisp.verifyTypeError(val, "string");
     return val;
 };
 wisp.verifyBoolean = function(val) {
-    if (!wisp.isAbstractBoolean(val)) throw "Type Error: " + val.toString() + " is not a boolean";
+    if (!wisp.isAbstractBoolean(val)) wisp.verifyTypeError(val, "boolean");
     return val;
 };
 wisp.verifyIdentifier = function(val) {
-    if (!wisp.isAbstractIdentifier(val)) throw "Type Error: " + val.toString() + " is not an identifier";
+    if (!wisp.isAbstractIdentifier(val)) wisp.verifyTypeError(val, "identifier", true);
     return val;
 };
 wisp.verifyLambdaClosure = function(val) {
-    if (!wisp.isAbstractLambdaClosure(val)) throw "Type Error: " + val.toString() + " is not a function";
+    if (!wisp.isAbstractLambdaClosure(val)) wisp.verifyTypeError(val, "lambda");
     return val;
 };
 wisp.verifyMacroClosure = function(val) {
-    if (!wisp.isAbstractMacroClosure(val)) throw "Type Error: " + val.toString() + " is not a macro";
+    if (!wisp.isAbstractMacroClosure(val)) wisp.verifyTypeError(val, "macro");
     return val;
+};
+wisp.verifyTypeError = function(val, type, isAn) {
+    var aOrAn = isAn ? "an": "a";
+	wisp.exceptionHelper(val.toString() + " is not " + aOrAn + " " + type, [val]);
 };
 wisp.isAtom = function(val) {
     return wisp.isNumber(val) || wisp.isBoolean(val) || wisp.isString(val);
@@ -95,19 +102,15 @@ wisp.isCons = function(val) {
     return wisp.isEmpty(val) || wisp.isNonEmptyCons(val);
 };
 wisp.cons = function(first, rest) {
-    if (!wisp.isCons(rest)) throw "Wisp error: must cons onto another list";
+    if (!wisp.isCons(rest)) wisp.exceptionHelper("must cons onto another list", [first, rest]);
     return [first, rest];
 };
 wisp.first = function(list) {
-    if (!wisp.isNonEmptyCons(list)) {
-        throw "Wisp error: first is only defined for non-empty lists";
-    }
+    if (!wisp.isNonEmptyCons(list)) wisp.exceptionHelper("first is only defined for non-empty lists", [list]);
     return list[0];
 };
 wisp.rest = function(list) {
-    if (!wisp.isNonEmptyCons(list)) {
-        throw "Wisp error: rest is only defined for non-empty lists";
-    }
+    if (!wisp.isNonEmptyCons(list)) wisp.exceptionHelper("rest is only defined for non-empty lists", [list]);
     return list[1];
 };
 wisp.second = function(list) {
@@ -125,7 +128,7 @@ wisp.seconds = function(list) {
     return wisp.cons(wisp.second(wisp.first(list)), wisp.seconds(wisp.rest(list)));
 };
 wisp.append = function(list1, list2) {
-    if (!wisp.isCons(list1) || !wisp.isCons(list2)) throw "Wisp error: both arguments to append must be lists";
+    if (!wisp.isCons(list1) || !wisp.isCons(list2)) wisp.exceptionHelper("Wisp error: both arguments to append must be lists", [list1, list2]);
     if (wisp.isEmpty(list1)) return list2;
     return wisp.cons(wisp.first(list1), wisp.append(wisp.rest(list1), list2));
 };
@@ -135,7 +138,7 @@ Array.prototype.toWispString = function() {
     return this._toWispString(true);
 };
 Array.prototype._toWispString = function(start) {
-    if (!wisp.isCons(this)) throw "toWispString only applies to Wisp lists";
+    if (!wisp.isCons(this)) wisp.exceptionHelper("toWispString only applies to Wisp lists", [this]);
     if (wisp.isEmpty(this)) return "";
     var restStr, str = "",
     first = wisp.first(this);
@@ -149,6 +152,32 @@ Array.prototype._toWispString = function(start) {
 };
 // override default toString
 Array.prototype.toString = Array.prototype.toWispString;
+
+wisp.throwException = function(exceptionObject) {
+    var message = "Wisp Error: ";
+    if ((typeof exceptionObject === "object") && exceptionObject.msg) {
+        message += exceptionObject.msg;
+        if (exceptionObject.lineNo) message += " (near line " + exceptionObject.lineNo + ")";
+    }
+    else {
+        message += exceptionObject.toString();
+    }
+    throw message;
+};
+
+wisp.exceptionHelper = function(message, objArray) {
+    var exception = {
+        msg: message
+    };
+	for (var i = 0; i < objArray.length; i++){
+		if (wisp.isAbstractSyntax(objArray[i])){
+			exception.lineNo = objArray[i].lineNo;
+			break;
+		} 
+	}
+    wisp.throwException(exception);
+};
+
 /****** End Core Wisp ******/
 
 /****** Reader
@@ -156,13 +185,22 @@ Consumes strings representing wisp s-expressions and produces corresponding inte
 ******/
 
 wisp.EOF = {
-    type: "EOF"
+    type: "EOF",
+    toString: function() {
+        return "End of File";
+    }
 };
 wisp.EOL = {
-    type: "EOL" // end of list, not line
+    type: "EOL",
+    toString: function() {
+        return "End of List";
+    }
 };
 wisp.COMMENT = {
-    type: "Comment"
+    type: "Comment",
+    toString: function() {
+        return "Comment Line";
+    }
 };
 
 /** Converts array (such as that produced by _readIntoArray) into wisp sexp
@@ -179,6 +217,16 @@ Array.prototype.toWispSexp = function() {
     return result;
 };
 
+/** Counts number of occurences of a regex in a string, used in reader to count newlines
+*/
+wisp.countOccurrence = function(string, regexToCount) {
+    var res = string.match(new RegExp(regexToCount, "g"));
+    if (res === null) {
+        return 0;
+    }
+    return res.length;
+};
+
 /**	Consumes program text as a string and and option advance object indicating where in the string
 	to begin reading.
 	Produces wisp list of string tokens with the list structure mirroring that given in the program text.
@@ -187,9 +235,11 @@ wisp.read = function(wispScript, advance) {
     if (advance === undefined) {
         advance = {
             'index': 0,
-            'lineNumber': 1
+            'lineNo': 1
         };
     }
+    // wrap in a (seq ... ) so that we can have many 'top level' expressions in a file (or not)
+    // wispScript = "(seq " + wispScript + ")";
     var asArrays = wisp._readIntoArray(wispScript, advance);
     return (asArrays instanceof Array) ? asArrays.toWispSexp() : asArrays;
 };
@@ -202,10 +252,11 @@ wisp.read = function(wispScript, advance) {
 */
 wisp._readIntoArray = function(wispScript, advance) {
     if (wispScript.length === 0 || wispScript.length <= advance['index']) return wisp.EOF;
-    var upToHere = wispScript.substring(advance['index']);
+    var token, lineNo, pos, upToHere = wispScript.substring(advance['index']);
     var nextChar = upToHere.trim()[0];
     var nextCharIndex = upToHere.indexOf(nextChar);
-    var token, pos;
+    advance['lineNo'] = advance['lineNo'] + wisp.countOccurrence(upToHere.substring(0, nextCharIndex), "\n");
+    lineNo = advance['lineNo'];
     switch (nextChar) {
     case ")":
         // End of list, advance index past the character and return end of list constant
@@ -219,12 +270,18 @@ wisp._readIntoArray = function(wispScript, advance) {
             val = wisp._readIntoArray(wispScript, advance);
             if (val === wisp.COMMENT) continue;
             if (val === wisp.EOL) break;
-            if (val === wisp.EOF) throw "Error: end of file reached without reaching end of list";
+            if (val === wisp.EOF) wisp.throwException({msg: "Error: end of file reached without reaching end of list", lineNo: lineNo});
             sexp.push(val);
         }
         return sexp;
     case "\"":
-        //string case needed to simply default token extraction (whitespace is ignored, we only look for closing ")
+        //string case needed to simplify default token extraction (whitespace is ignored, we only look for closing ")
+        // upToHere = upToHere.substring(nextCharIndex);
+        //         pos = upToHere.search(/[^\\]"/) + 2; //twice for two char regex
+        //         token = upToHere.substring(0, pos);
+        // advance['lineNo'] = advance['lineNo'] + wisp.countOccurrence(token, "\n");
+        //         advance['index'] += pos;
+        //         return wisp.tokenToAbstractSyntax(token.trim(), lineNo);
         pos = upToHere.substring(nextCharIndex).search(/[^\\]"/) + nextCharIndex + 2; //twice for two char regex
         token = upToHere.substring(0, pos).trim();
         advance['index'] += pos;
@@ -233,22 +290,22 @@ wisp._readIntoArray = function(wispScript, advance) {
         //quote
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return [wisp.tokenToAbstractSyntax("quote"), token];
+        return [wisp.tokenToAbstractSyntax("quote", lineNo), token];
     case "`":
         //backquote
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return [wisp.tokenToAbstractSyntax("backquote"), token];
+        return [wisp.tokenToAbstractSyntax("backquote", lineNo), token];
     case "~":
         //unquote and unquote-splice
         if (upToHere[nextCharIndex + 1] == "@") {
             advance['index'] += nextCharIndex + 2;
             token = wisp._readIntoArray(wispScript, advance);
-            return [wisp.tokenToAbstractSyntax("unquote-splice"), token];
+            return [wisp.tokenToAbstractSyntax("unquote-splice", lineNo), token];
         }
         advance['index'] += nextCharIndex + 1;
         token = wisp._readIntoArray(wispScript, advance);
-        return [wisp.tokenToAbstractSyntax("unquote"), token];
+        return [wisp.tokenToAbstractSyntax("unquote", lineNo), token];
     case ";":
         //single until-end-of-line comment
         pos = (upToHere.search(/\n/) + 1) || wispScript.length;
@@ -264,22 +321,27 @@ wisp._readIntoArray = function(wispScript, advance) {
         whiteSpace = upToHere.search(/\S\s/) + 1;
         if (whiteSpace === 0) whiteSpace = (wispScript.length - advance['index']); // relative index of end of file
         endOfToken = (closeParen < whiteSpace) ? closeParen: whiteSpace;
-        token = upToHere.substring(0, endOfToken).trim();
+        token = upToHere.substring(0, endOfToken);
+        advance['lineNo'] = advance['lineNo'] + wisp.countOccurrence(token, "\n");
+        token = token.trim();
         advance['index'] += endOfToken;
-        return wisp.tokenToAbstractSyntax(token);
+        return wisp.tokenToAbstractSyntax(token, lineNo);
     }
 };
-wisp.tokenToAbstractSyntax = function(tokenString) {
+wisp.tokenToAbstractSyntax = function(tokenString, lineNo) {
     var tokenObject = {};
     if (wisp.parseIsNumber(tokenString)) {
         tokenObject.type = "number";
+        tokenObject.lineNo = lineNo;
         tokenObject.value = parseFloat(tokenString);
         tokenObject.toString = function() {
-            return this.value + "";
+            // return this.value + "";
+            return this.value + "" + "(line " + this.lineNo + ")";
         };
     }
     else if (wisp.parseIsBoolean(tokenString)) {
         tokenObject.type = "bool";
+        tokenObject.lineNo = lineNo;
         tokenObject.value = tokenString === "true";
         tokenObject.toString = function() {
             return this.value + "";
@@ -287,6 +349,7 @@ wisp.tokenToAbstractSyntax = function(tokenString) {
     }
     else if (wisp.parseIsString(tokenString)) {
         tokenObject.type = "string";
+        tokenObject.lineNo = lineNo;
         tokenObject.value = tokenString.substring(1, tokenString.length - 1).replace(/\\"/g, "\""); //strip quotes and escapes
         tokenObject.toString = function() {
             return '"' + this.value + '"';
@@ -295,6 +358,7 @@ wisp.tokenToAbstractSyntax = function(tokenString) {
     else {
         // identifier
         tokenObject.type = "id";
+        tokenObject.lineNo = lineNo;
         tokenObject.value = tokenString;
         tokenObject.toString = function() {
             return "'" + this.value;
@@ -380,7 +444,7 @@ wisp.envLookup = function(id, env) {
     if (val === undefined) val = env[name];
 
     if (val === undefined) {
-        throw "Unbound identifier: " + name + " isn't defined in the current scope.";
+		wisp.exceptionHelper("Unbound identifier: " + name + " isn't defined in the current scope.", [id]);
     }
     else {
         return val;
@@ -412,6 +476,8 @@ wisp.addArgsToEnv = function(params, args, startingEnv) {
         return startingEnv;
     }
     else if (wisp.isEmpty(args)) {
+		// we don't want param lino no, we want argument...
+		// wisp.exceptionHelper("Wisp error: insufficient number of arguments given", [nextParam]);
         throw "Wisp error: insufficient number of arguments given";
     }
     else {
@@ -651,9 +717,9 @@ wisp.basicEnv = {
         if (wisp.isAtom(first) && wisp.isAtom(second)) {
             return first === second;
         }
-		else if (wisp.isAbstractIdentifier(first) && wisp.isAbstractIdentifier(second)) {
-			return first.value === second.value;
-		}
+        else if (wisp.isAbstractIdentifier(first) && wisp.isAbstractIdentifier(second)) {
+            return first.value === second.value;
+        }
         else if (wisp.isEmpty(first) && wisp.isEmpty(second)) {
             return true;
         }
